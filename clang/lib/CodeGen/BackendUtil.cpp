@@ -1192,6 +1192,7 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
 #include "llvm/Support/Extension.def"
 
   LoopAnalysisManager LAM(CodeGenOpts.DebugPassManager);
+  LoopNestAnalysisManager LNAM(CodeGenOpts.DebugPassManager);
   FunctionAnalysisManager FAM(CodeGenOpts.DebugPassManager);
   CGSCCAnalysisManager CGAM(CodeGenOpts.DebugPassManager);
   ModuleAnalysisManager MAM(CodeGenOpts.DebugPassManager);
@@ -1211,7 +1212,8 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
   PB.registerCGSCCAnalyses(CGAM);
   PB.registerFunctionAnalyses(FAM);
   PB.registerLoopAnalyses(LAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+  PB.registerLoopNestAnalyses(LNAM);
+  PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, MAM);
 
   ModulePassManager MPM(CodeGenOpts.DebugPassManager);
 

@@ -410,6 +410,7 @@ protected:
   PassBuilder PB;
   ModulePassManager PM;
   LoopAnalysisManager LAM;
+  LoopNestAnalysisManager LNAM;
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager AM;
@@ -441,7 +442,7 @@ protected:
                   "}\n")),
         CallbacksHandle(),
         PB(nullptr, PipelineTuningOptions(), None, &CallbacksHandle.Callbacks),
-        PM(true), LAM(true), FAM(true), CGAM(true), AM(true) {
+        PM(true), LAM(true), LNAM(true), FAM(true), CGAM(true), AM(true) {
 
     EXPECT_TRUE(&CallbacksHandle.Callbacks ==
                 PB.getPassInstrumentationCallbacks());
@@ -484,7 +485,8 @@ protected:
     PB.registerCGSCCAnalyses(CGAM);
     PB.registerFunctionAnalyses(FAM);
     PB.registerLoopAnalyses(LAM);
-    PB.crossRegisterProxies(LAM, FAM, CGAM, AM);
+    PB.registerLoopNestAnalyses(LNAM);
+    PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, AM);
   }
 };
 

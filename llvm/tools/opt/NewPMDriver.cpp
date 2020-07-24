@@ -18,6 +18,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/LoopNestAnalysisManager.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Dominators.h"
@@ -360,6 +361,7 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
   }
 
   LoopAnalysisManager LAM(DebugPM);
+  LoopNestAnalysisManager LNAM(DebugPM);
   FunctionAnalysisManager FAM(DebugPM);
   CGSCCAnalysisManager CGAM(DebugPM);
   ModuleAnalysisManager MAM(DebugPM);
@@ -372,7 +374,8 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
   PB.registerCGSCCAnalyses(CGAM);
   PB.registerFunctionAnalyses(FAM);
   PB.registerLoopAnalyses(LAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+  PB.registerLoopNestAnalyses(LNAM);
+  PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, MAM);
 
   ModulePassManager MPM(DebugPM);
   if (VK > VK_NoVerifier)

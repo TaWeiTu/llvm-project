@@ -16,6 +16,7 @@
 #include "llvm/LTO/LTOBackend.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/LoopNestAnalysisManager.h"
 #include "llvm/Analysis/ModuleSummaryAnalysis.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -209,6 +210,7 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
   RegisterPassPlugins(Conf.PassPlugins, PB);
 
   LoopAnalysisManager LAM(Conf.DebugPassManager);
+  LoopNestAnalysisManager LNAM(Conf.DebugPassManager);
   FunctionAnalysisManager FAM(Conf.DebugPassManager);
   CGSCCAnalysisManager CGAM(Conf.DebugPassManager);
   ModuleAnalysisManager MAM(Conf.DebugPassManager);
@@ -221,7 +223,8 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
   PB.registerCGSCCAnalyses(CGAM);
   PB.registerFunctionAnalyses(FAM);
   PB.registerLoopAnalyses(LAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+  PB.registerLoopNestAnalyses(LNAM);
+  PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, MAM);
 
   ModulePassManager MPM(Conf.DebugPassManager);
   // FIXME (davide): verify the input.
@@ -271,6 +274,7 @@ static void runNewPMCustomPasses(const Config &Conf, Module &Mod,
   RegisterPassPlugins(Conf.PassPlugins, PB);
 
   LoopAnalysisManager LAM;
+  LoopNestAnalysisManager LNAM;
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager MAM;
@@ -283,7 +287,8 @@ static void runNewPMCustomPasses(const Config &Conf, Module &Mod,
   PB.registerCGSCCAnalyses(CGAM);
   PB.registerFunctionAnalyses(FAM);
   PB.registerLoopAnalyses(LAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+  PB.registerLoopNestAnalyses(LNAM);
+  PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, MAM);
 
   ModulePassManager MPM;
 

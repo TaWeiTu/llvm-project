@@ -22,6 +22,7 @@ TEST(LICMTest, TestSCEVInvalidationOnHoisting) {
   ModulePassManager MPM;
   PassBuilder PB;
   LoopAnalysisManager LAM;
+  LoopNestAnalysisManager LNAM;
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager MAM;
@@ -30,7 +31,8 @@ TEST(LICMTest, TestSCEVInvalidationOnHoisting) {
   PB.registerCGSCCAnalyses(CGAM);
   PB.registerFunctionAnalyses(FAM);
   PB.registerLoopAnalyses(LAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+  PB.registerLoopNestAnalyses(LNAM);
+  PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, MAM);
 
   StringRef PipelineStr = "require<opt-remark-emit>,loop(licm)";
   ASSERT_THAT_ERROR(PB.parsePassPipeline(MPM, PipelineStr), Succeeded());

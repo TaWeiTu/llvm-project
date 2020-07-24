@@ -136,6 +136,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
   PassBuilder PB(TM.get());
 
   LoopAnalysisManager LAM;
+  LoopNestAnalysisManager LNAM;
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
   ModulePassManager MPM;
@@ -146,7 +147,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
   PB.registerCGSCCAnalyses(CGAM);
   PB.registerFunctionAnalyses(FAM);
   PB.registerLoopAnalyses(LAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+  PB.registerLoopNestAnalyses(LNAM);
+  PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, MAM);
 
   auto Err = PB.parsePassPipeline(MPM, PassPipeline, false, false);
   assert(!Err && "Should have been checked during fuzzer initialization");

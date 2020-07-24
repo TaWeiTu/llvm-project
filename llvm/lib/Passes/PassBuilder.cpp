@@ -145,6 +145,7 @@
 #include "llvm/Transforms/Scalar/LoopIdiomRecognize.h"
 #include "llvm/Transforms/Scalar/LoopInstSimplify.h"
 #include "llvm/Transforms/Scalar/LoopLoadElimination.h"
+#include "llvm/Transforms/Scalar/LoopNestPassManager.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Scalar/LoopPredication.h"
 #include "llvm/Transforms/Scalar/LoopRotation.h"
@@ -393,6 +394,29 @@ public:
   static StringRef name() { return "NoOpLoopAnalysis"; }
 };
 
+/// No-op loop nest pass which does nothing.
+struct NoOpLoopNestPass : PassInfoMixin<NoOpLoopNestPass> {
+  PreservedAnalyses run(LoopNest &LN, LoopNestAnalysisManager &,
+                        LoopStandardAnalysisResults &, LNPMUpdater &) {
+    return PreservedAnalyses::all();
+  }
+  static StringRef name() { return "NoOpLoopNestPass"; }
+};
+
+/// No-op loop nest analysis.
+class NoOpLoopNestAnalysis : public AnalysisInfoMixin<NoOpLoopNestAnalysis> {
+  friend AnalysisInfoMixin<NoOpLoopNestAnalysis>;
+  static AnalysisKey Key;
+
+public:
+  struct Result {};
+  Result run(LoopNest &, LoopNestAnalysisManager &,
+             LoopStandardAnalysisResults &) {
+    return Result();
+  }
+  static StringRef name() { return "NoOpLoopNestAnalysis"; }
+};
+
 AnalysisKey NoOpModuleAnalysis::Key;
 AnalysisKey NoOpCGSCCAnalysis::Key;
 AnalysisKey NoOpFunctionAnalysis::Key;
@@ -440,6 +464,15 @@ void PassBuilder::registerLoopAnalyses(LoopAnalysisManager &LAM) {
 
   for (auto &C : LoopAnalysisRegistrationCallbacks)
     C(LAM);
+}
+
+void PassBuilder::registerLoopNestAnalyses(LoopNestAnalysisManager &LNAM) {
+#define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)                                  \
+  LNAM.registerPass([&] { return CREATE_PASS; });
+#include "PassRegistry.def"
+
+  for (auto &C : LoopNestAnalysisRegistrationCallbacks)
+    C(LNAM);
 }
 
 // TODO: Investigate the cost/benefit of tail call elimination on debugging.
@@ -2017,6 +2050,30 @@ static bool isFunctionPassName(StringRef Name, CallbacksT &Callbacks) {
 }
 
 template <typename CallbacksT>
+static bool isLoopNestPassName(StringRef Name, CallbacksT &Callbacks) {
+  // Explicitly handle pass manager names.
+  if (Name == "loop-nest" || Name == "loop-nest-mssa")
+    return true;
+
+  // Explicitly handle custom-parsed pass names.
+  if (parseRepeatPassName(Name))
+    return true;
+
+#define LOOP_NEST_PASS(NAME, CREATE_PASS)                                      \
+  if (Name == NAME)                                                            \
+    return true;
+#define LOOP_NEST_PASS_WITH_PARAMS(NAME, CREATE_PASS, PARSER)                  \
+  if (checkParametrizedPassName(Name, NAME))                                   \
+    return true;
+#define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)                                  \
+  if (Name == "require<" NAME ">" || Name == "invalidate<" NAME ">")           \
+    return true;
+#include "PassRegistry.def"
+
+  return callbacksAcceptPassName<LoopNestPassManager>(Name, Callbacks);
+}
+
+template <typename CallbacksT>
 static bool isLoopPassName(StringRef Name, CallbacksT &Callbacks) {
   // Explicitly handle pass manager names.
   if (Name == "loop" || Name == "loop-mssa")
@@ -2408,6 +2465,16 @@ Error PassBuilder::parseFunctionPass(FunctionPassManager &FPM,
       FPM.addPass(std::move(NestedFPM));
       return Error::success();
     }
+    if (Name == "loop-nest" || Name == "loop-nest-mssa") {
+      LoopNestPassManager LNPM(DebugLogging);
+      if (auto Err = parseLoopNestPassPipeline(LNPM, InnerPipeline,
+                                               VerifyEachPass, DebugLogging))
+        return Err;
+      bool UseMemorySSA = (Name == "loop-nest-mssa");
+      FPM.addPass(createFunctionToLoopNestPassAdaptor(
+          std::move(LNPM), UseMemorySSA, DebugLogging));
+      return Error::success();
+    }
     if (Name == "loop" || Name == "loop-mssa") {
       LoopPassManager LPM(DebugLogging);
       if (auto Err = parseLoopPassPipeline(LPM, InnerPipeline, VerifyEachPass,
@@ -2490,6 +2557,79 @@ Error PassBuilder::parseFunctionPass(FunctionPassManager &FPM,
       return Error::success();
   return make_error<StringError>(
       formatv("unknown function pass '{0}'", Name).str(),
+      inconvertibleErrorCode());
+}
+
+Error PassBuilder::parseLoopNestPass(LoopNestPassManager &LNPM,
+                                     const PipelineElement &E,
+                                     bool VerifyEachPass, bool DebugLogging) {
+  StringRef Name = E.Name;
+  auto &InnerPipeline = E.InnerPipeline;
+
+  // First handle complex passes like the pass managers which carry pipelines.
+  if (!InnerPipeline.empty()) {
+    if (Name == "loop-nest") {
+      LoopNestPassManager NestedLNPM(DebugLogging);
+      if (auto Err = parseLoopNestPassPipeline(NestedLNPM, InnerPipeline,
+                                               VerifyEachPass, DebugLogging))
+        return Err;
+      // Add the nested pass manager with the appropriate adaptor.
+      LNPM.addPass(std::move(NestedLNPM));
+      return Error::success();
+    }
+    if (auto Count = parseRepeatPassName(Name)) {
+      LoopNestPassManager NestedLNPM(DebugLogging);
+      if (auto Err = parseLoopNestPassPipeline(NestedLNPM, InnerPipeline,
+                                               VerifyEachPass, DebugLogging))
+        return Err;
+      LNPM.addPass(createRepeatedPass(*Count, std::move(NestedLNPM)));
+      return Error::success();
+    }
+
+    for (auto &C : LoopNestPipelineParsingCallbacks)
+      if (C(Name, LNPM, InnerPipeline))
+        return Error::success();
+
+    // Normal passes can't have pipelines.
+    return make_error<StringError>(
+        formatv("invalid use of '{0}' pass as loop pipeline", Name).str(),
+        inconvertibleErrorCode());
+  }
+
+// Now expand the basic registered passes from the .inc file.
+#define LOOP_NEST_PASS(NAME, CREATE_PASS)                                      \
+  if (Name == NAME) {                                                          \
+    LNPM.addPass(CREATE_PASS);                                                 \
+    return Error::success();                                                   \
+  }
+#define LOOP_NEST_PASS_WITH_PARAMS(NAME, CREATE_PASS, PARSER)                  \
+  if (checkParametrizedPassName(Name, NAME)) {                                 \
+    auto Params = parsePassParameters(PARSER, Name, NAME);                     \
+    if (!Params)                                                               \
+      return Params.takeError();                                               \
+    LNPM.addPass(CREATE_PASS(Params.get()));                                   \
+    return Error::success();                                                   \
+  }
+#define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)                                  \
+  if (Name == "require<" NAME ">") {                                           \
+    LNPM.addPass(RequireAnalysisPass<                                          \
+                 std::remove_reference<decltype(CREATE_PASS)>::type, LoopNest, \
+                 LoopNestAnalysisManager, LoopStandardAnalysisResult &,        \
+                 LNPMUpdater &>());                                            \
+    return Error::success();                                                   \
+  }                                                                            \
+  if (Name == "invalidate<" NAME ">") {                                        \
+    LNPM.addPass(InvalidateAnalysisPass <                                      \
+                 std::remove_reference<decltype(CREATE_PASS)>::type());        \
+    return Error::success();                                                   \
+  }
+#include "PassRegistry.def"
+
+  for (auto &C : LoopNestPipelineParsingCallbacks)
+    if (C(Name, LNPM, InnerPipeline))
+      return Error::success();
+  return make_error<StringError>(
+      formatv("unknown loop nest pass '{0}'", Name).str(),
       inconvertibleErrorCode());
 }
 
@@ -2585,6 +2725,19 @@ bool PassBuilder::parseAAPassName(AAManager &AA, StringRef Name) {
   return false;
 }
 
+Error PassBuilder::parseLoopNestPassPipeline(LoopNestPassManager &LNPM,
+                                             ArrayRef<PipelineElement> Pipeline,
+                                             bool VerifyEachPass,
+                                             bool DebugLogging) {
+  for (const auto &Element : Pipeline) {
+    if (auto Err =
+            parseLoopNestPass(LNPM, Element, VerifyEachPass, DebugLogging))
+      return Err;
+    // FIXME: No verifier support for LoopNest passes!
+  }
+  return Error::success();
+}
+
 Error PassBuilder::parseLoopPassPipeline(LoopPassManager &LPM,
                                          ArrayRef<PipelineElement> Pipeline,
                                          bool VerifyEachPass,
@@ -2624,6 +2777,7 @@ Error PassBuilder::parseCGSCCPassPipeline(CGSCCPassManager &CGPM,
 }
 
 void PassBuilder::crossRegisterProxies(LoopAnalysisManager &LAM,
+                                       LoopNestAnalysisManager &LNAM,
                                        FunctionAnalysisManager &FAM,
                                        CGSCCAnalysisManager &CGAM,
                                        ModuleAnalysisManager &MAM) {
@@ -2632,7 +2786,11 @@ void PassBuilder::crossRegisterProxies(LoopAnalysisManager &LAM,
   CGAM.registerPass([&] { return ModuleAnalysisManagerCGSCCProxy(MAM); });
   FAM.registerPass([&] { return CGSCCAnalysisManagerFunctionProxy(CGAM); });
   FAM.registerPass([&] { return ModuleAnalysisManagerFunctionProxy(MAM); });
+  FAM.registerPass([&] { return LoopNestAnalysisManagerFunctionProxy(LNAM); });
   FAM.registerPass([&] { return LoopAnalysisManagerFunctionProxy(LAM); });
+  // LNAM.registerPass([&] { return LoopNestAnalysisManagerFunctionProxy(FAM); });
+  LNAM.registerPass([&] { return LoopAnalysisManagerLoopNestProxy(LAM); });
+  // LNAM.registerPass([&] { return LoopNestAnalysisManagerLoopProxy(LAM); });
   LAM.registerPass([&] { return FunctionAnalysisManagerLoopProxy(FAM); });
 }
 
@@ -2671,6 +2829,9 @@ Error PassBuilder::parsePassPipeline(ModulePassManager &MPM,
     } else if (isFunctionPassName(FirstName,
                                   FunctionPipelineParsingCallbacks)) {
       Pipeline = {{"function", std::move(*Pipeline)}};
+    } else if (isLoopNestPassName(FirstName,
+                                  LoopNestPipelineParsingCallbacks)) {
+      Pipeline = {{"function", {{"loop-nest", std::move(*Pipeline)}}}};
     } else if (isLoopPassName(FirstName, LoopPipelineParsingCallbacks)) {
       Pipeline = {{"function", {{"loop", std::move(*Pipeline)}}}};
     } else {
@@ -2796,6 +2957,9 @@ bool PassBuilder::isAnalysisPassName(StringRef PassName) {
   if (PassName == NAME)                                                        \
     return true;
 #define LOOP_ANALYSIS(NAME, CREATE_PASS)                                       \
+  if (PassName == NAME)                                                        \
+    return true;
+#define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)                                  \
   if (PassName == NAME)                                                        \
     return true;
 #define CGSSC_ANALYSIS(NAME, CREATE_PASS)                                      \

@@ -128,7 +128,7 @@ private:
 /// analyses are still valid after the transformation. For most passes this is
 /// fairly simple: if they don't change anything all analyses are preserved,
 /// otherwise only a short list of analyses that have been explicitly updated
-/// are not preserved.
+/// are preserved.
 ///
 /// This class also lets transformation passes mark abstract *sets* of analyses
 /// as preserved. A transformation that (say) does not alter the CFG can

@@ -17,11 +17,13 @@
 
 #include "llvm/ADT/Optional.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/LoopNestAnalysisManager.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Transforms/IPO/Inliner.h"
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
+#include "llvm/Transforms/Scalar/LoopNestPassManager.h"
 #include <vector>
 
 namespace llvm {
@@ -270,6 +272,7 @@ public:
   /// This is an interface that can be used to cross register each
   /// AnalysisManager with all the others analysis managers.
   void crossRegisterProxies(LoopAnalysisManager &LAM,
+                            LoopNestAnalysisManager &LNAM,
                             FunctionAnalysisManager &FAM,
                             CGSCCAnalysisManager &CGAM,
                             ModuleAnalysisManager &MAM);
@@ -304,6 +307,13 @@ public:
   /// with all registered loop analyses. Callers can still manually register any
   /// additional analyses.
   void registerLoopAnalyses(LoopAnalysisManager &LAM);
+
+  /// Registers all available loop nest analysis passes.
+  ///
+  /// This is an interface that can be used to populate a \c
+  /// LoopNestAnalysisManager with all registered loop nest analyses. Callers
+  /// can still manually register any additional analyses.
+  void registerLoopNestAnalyses(LoopNestAnalysisManager &LNAM);
 
   /// Construct the core LLVM function canonicalization and simplification
   /// pipeline.
@@ -507,6 +517,9 @@ public:
   Error parsePassPipeline(LoopPassManager &LPM, StringRef PipelineText,
                           bool VerifyEachPass = true,
                           bool DebugLogging = false);
+  Error parsePassPipeline(LoopNestPassManager &LPM, StringRef PipelineText,
+                          bool VerifyEachPass = true,
+                          bool DebugLogging = false);
   /// @}}
 
   /// Parse a textual alias analysis pipeline into the provided AA manager.
@@ -644,6 +657,10 @@ public:
     LoopAnalysisRegistrationCallbacks.push_back(C);
   }
   void registerAnalysisRegistrationCallback(
+      const std::function<void(LoopNestAnalysisManager &)> &C) {
+    LoopNestAnalysisRegistrationCallbacks.push_back(C);
+  }
+  void registerAnalysisRegistrationCallback(
       const std::function<void(ModuleAnalysisManager &)> &C) {
     ModuleAnalysisRegistrationCallbacks.push_back(C);
   }
@@ -667,6 +684,11 @@ public:
       const std::function<bool(StringRef Name, LoopPassManager &,
                                ArrayRef<PipelineElement>)> &C) {
     LoopPipelineParsingCallbacks.push_back(C);
+  }
+  void registerPipelineParsingCallback(
+      const std::function<bool(StringRef Name, LoopNestPassManager &,
+                               ArrayRef<PipelineElement>)> &C) {
+    LoopNestPipelineParsingCallbacks.push_back(C);
   }
   void registerPipelineParsingCallback(
       const std::function<bool(StringRef Name, ModulePassManager &,
@@ -715,11 +737,16 @@ private:
                           bool VerifyEachPass, bool DebugLogging);
   Error parseLoopPass(LoopPassManager &LPM, const PipelineElement &E,
                       bool VerifyEachPass, bool DebugLogging);
+  Error parseLoopNestPass(LoopNestPassManager &LNPM, const PipelineElement &E,
+                          bool VerifyEachPass, bool DebugLogging);
   bool parseAAPassName(AAManager &AA, StringRef Name);
 
   Error parseLoopPassPipeline(LoopPassManager &LPM,
                               ArrayRef<PipelineElement> Pipeline,
                               bool VerifyEachPass, bool DebugLogging);
+  Error parseLoopNestPassPipeline(LoopNestPassManager &LNPM,
+                                  ArrayRef<PipelineElement> Pipeline,
+                                  bool VerifyEachPass, bool DebugLogging);
   Error parseFunctionPassPipeline(FunctionPassManager &FPM,
                                   ArrayRef<PipelineElement> Pipeline,
                                   bool VerifyEachPass, bool DebugLogging);
@@ -785,6 +812,13 @@ private:
                                  ArrayRef<PipelineElement>)>,
               2>
       LoopPipelineParsingCallbacks;
+  // LoopNest callbacks
+  SmallVector<std::function<void(LoopNestAnalysisManager &)>, 2>
+      LoopNestAnalysisRegistrationCallbacks;
+  SmallVector<std::function<bool(StringRef, LoopNestPassManager &,
+                                 ArrayRef<PipelineElement>)>,
+              2>
+      LoopNestPipelineParsingCallbacks;
   // AA callbacks
   SmallVector<std::function<bool(StringRef Name, AAManager &AA)>, 2>
       AAParsingCallbacks;

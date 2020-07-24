@@ -365,3 +365,26 @@ LOOP_PASS_WITH_PARAMS("unswitch",
                            },
                            parseLoopUnswitchOptions)
 #undef LOOP_PASS_WITH_PARAMS
+
+#ifndef LOOP_NEST_ANALYSIS
+#define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)
+#endif
+#undef LOOP_NEST_ANALYSIS
+
+#ifndef LOOP_NEST_PASS
+#define LOOP_NEST_PASS(NAME, CREATE_PASS)
+#endif
+LOOP_NEST_PASS("no-op-loop-nest", NoOpLoopNestPass())
+LOOP_NEST_PASS("print-loop-nest", PrintLoopNestPass())
+#undef LOOP_NEST_PASS
+
+#ifndef LOOP_NEST_PASS_WITH_PARAMS
+#define LOOP_NEST_PASS_WITH_PARAMS(NAME, CREATE_PASS)
+#endif
+#undef LOOP_NEST_PASS_WITH_PARAMS
+
+#ifndef LOOP_NEST_ANALYSIS
+#define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)
+#endif
+LOOP_NEST_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
+#undef LOOP_NEST_ANALYSIS

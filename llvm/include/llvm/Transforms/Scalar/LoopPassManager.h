@@ -104,9 +104,7 @@ using RequireAnalysisLoopPass =
     RequireAnalysisPass<AnalysisT, Loop, LoopAnalysisManager,
                         LoopStandardAnalysisResults &, LPMUpdater &>;
 
-template <typename LoopUnitT, typename LoopUnitPassManagerMetadataT,
-          typename LoopUnitPassT>
-class FunctionToLoopUnitPassAdaptor;
+template <typename LoopPassT> class FunctionToLoopPassAdaptor;
 
 /// This class provides an interface for updating the loop pass manager based
 /// on mutations to the loop nest.
@@ -201,9 +199,8 @@ public:
   }
 
 private:
-  template <typename LoopUnitT, typename LoopUnitMetadataT,
-            typename LoopUnitPassT>
-  friend class llvm::FunctionToLoopUnitPassAdaptor;
+  template <typename LoopPassT> friend class llvm::FunctionToLoopPassAdaptor;
+  template <typename LoopPassT> friend class llvm::LoopNestToLoopPassAdaptor;
 
   /// The \c FunctionToLoopPassAdaptor's worklist of loops to process.
   SmallPriorityWorklist<Loop *, 4> &Worklist;
@@ -225,44 +222,32 @@ private:
       : Worklist(Worklist), LAM(LAM) {}
 };
 
-/// Adaptor that maps from a fuinction to its loop units. Currently a loop unit
-/// can either be a loop or a loop nest rooted at a outermost loop.
+/// Adaptor that maps from a function to its loops.
 ///
-/// Designed to allow composition of a Loop(Nest)PassManager and a
+/// Designed to allow composition of a LoopPass(Manager) and a
 /// FunctionPassManager. Note that if this pass is constructed with a \c
-/// FunctionAnalysisManager it will run the \c
-/// Loop(Nest)AnalysisManagerFunctionProxy analysis prior to running the loop
-/// unit passes over the function to enable a \c Loop(Nest)AnalysisManager to be
-/// used within this run safely.
-template <typename LoopUnitT, typename LoopUnitPassManagerMetadataT,
-          typename LoopUnitPassT>
-class FunctionToLoopUnitPassAdaptor
-    : public PassInfoMixin<FunctionToLoopUnitPassAdaptor<
-          LoopUnitT, LoopUnitPassManagerMetadataT, LoopUnitPassT>> {
+/// FunctionAnalysisManager it will run the \c LoopAnalysisManagerFunctionProxy
+/// analysis prior to running the loop passes over the function to enable a \c
+/// LoopAnalysisManager to be used within this run safely.
+template <typename LoopPassT>
+class FunctionToLoopPassAdaptor
+    : public PassInfoMixin<FunctionToLoopPassAdaptor<LoopPassT>> {
 public:
-  /// The analysis manager type for the loop unit.
-  using AnalysisManagerProxyT =
-      typename LoopUnitPassManagerMetadataT::AnalysisManagerProxyT;
-  using AnalysisManagerT =
-      typename LoopUnitPassManagerMetadataT::AnalysisManagerT;
-  using PMUpdaterT = typename LoopUnitPassManagerMetadataT::PMUpdaterT;
-
-  explicit FunctionToLoopUnitPassAdaptor(LoopUnitPassT Pass,
-                                         bool UseMemorySSA = false,
-                                         bool DebugLogging = false)
+  explicit FunctionToLoopPassAdaptor(LoopPassT Pass, bool UseMemorySSA = false,
+                                     bool DebugLogging = false)
       : Pass(std::move(Pass)), LoopCanonicalizationFPM(DebugLogging),
         UseMemorySSA(UseMemorySSA) {
     LoopCanonicalizationFPM.addPass(LoopSimplifyPass());
     LoopCanonicalizationFPM.addPass(LCSSAPass());
   }
 
-  /// Runs the loop unit passes across every loop unit in the function.
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
-    // Before we even compute any loop unit analyses, first run a miniature
-    // function pass pipeline to put loop units into their canonical form. Note
-    // that we can directly build up function analyses after this as the
-    // function pass manager handles all the invalidation at that layer.
-    PassInstrumentation PI = FAM.getResult<PassInstrumentationAnalysis>(F);
+  /// Runs the loop passes across every loop in the function.
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
+    // Before we even compute any loop analyses, first run a miniature function
+    // pass pipeline to put loops into their canonical form. Note that we can
+    // directly build up function analyses after this as the function pass
+    // manager handles all the invalidation at that layer.
+    PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(F);
 
     PreservedAnalyses PA = PreservedAnalyses::all();
     // Check the PassInstrumentation's BeforePass callbacks before running the
@@ -272,8 +257,8 @@ public:
       PI.runAfterPass<Function>(LoopCanonicalizationFPM, F, PA);
     }
 
-    // Get the loop structure of this function
-    LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+    // Get the loop structure for this function
+    LoopInfo &LI = AM.getResult<LoopAnalysis>(F);
 
     // If there are no loops, there is nothing to do here.
     if (LI.empty())
@@ -281,36 +266,37 @@ public:
 
     // Get the analysis results needed by loop passes.
     MemorySSA *MSSA = UseMemorySSA
-                          ? (&FAM.getResult<MemorySSAAnalysis>(F).getMSSA())
+                          ? (&AM.getResult<MemorySSAAnalysis>(F).getMSSA())
                           : nullptr;
-    LoopStandardAnalysisResults LAR = {
-        FAM.getResult<AAManager>(F),
-        FAM.getResult<AssumptionAnalysis>(F),
-        FAM.getResult<DominatorTreeAnalysis>(F),
-        FAM.getResult<LoopAnalysis>(F),
-        FAM.getResult<ScalarEvolutionAnalysis>(F),
-        FAM.getResult<TargetLibraryAnalysis>(F),
-        FAM.getResult<TargetIRAnalysis>(F),
-        MSSA};
-    // Setup the loop unit analysis manager from its proxy. It is important that
+    LoopStandardAnalysisResults LAR = {AM.getResult<AAManager>(F),
+                                       AM.getResult<AssumptionAnalysis>(F),
+                                       AM.getResult<DominatorTreeAnalysis>(F),
+                                       AM.getResult<LoopAnalysis>(F),
+                                       AM.getResult<ScalarEvolutionAnalysis>(F),
+                                       AM.getResult<TargetLibraryAnalysis>(F),
+                                       AM.getResult<TargetIRAnalysis>(F),
+                                       MSSA};
+
+    // Setup the loop analysis manager from its proxy. It is important that
     // this is only done when there are loops to process and we have built the
-    // LoopStandardAnalysisResults object. The loop unit analyses cached in this
+    // LoopStandardAnalysisResults object. The loop analyses cached in this
     // manager have access to those analysis results and so it must invalidate
     // itself when they go away.
-    auto &Proxy = FAM.getResult<AnalysisManagerProxyT>(F);
+    auto &LAMFP = AM.getResult<LoopAnalysisManagerFunctionProxy>(F);
     if (UseMemorySSA)
-      Proxy.markMSSAUsed();
-    AnalysisManagerT &AM = Proxy.getManager();
+      LAMFP.markMSSAUsed();
+    LoopAnalysisManager &LAM = LAMFP.getManager();
 
-    // A postorder worklist of loops to process. Use Loop here regardless of
-    // the loop unit type.
+    // A postorder worklist of loops to process.
     SmallPriorityWorklist<Loop *, 4> Worklist;
 
-    // Register the worklist and loop unit analysis manager so that loop unit
-    // passes can update them when they mutate the loop nest structure.
-    PMUpdaterT Updater(Worklist, AM);
+    // Register the worklist and loop analysis manager so that loop passes can
+    // update them when they mutate the loop nest structure.
+    LPMUpdater Updater(Worklist, LAM);
 
-    LoopUnitPassManagerMetadataT::appendLoopUnitsToWorklist(LI, Worklist);
+    // Add the loop nests in the reverse order of LoopInfo. See method
+    // declaration.
+    appendLoopsToWorklist(LI, Worklist);
 
 #ifndef NDEBUG
     PI.pushBeforeNonSkippedPassCallback([&LAR, &LI](StringRef PassID, Any IR) {
@@ -341,18 +327,18 @@ public:
       // Check the PassInstrumentation's BeforePass callbacks before running the
       // pass, skip its execution completely if asked to (callback returns
       // false).
-      LoopUnitT &LU = Metadata.getLoopUnit(L);
-      if (!PI.runBeforePass<LoopUnitT>(Pass, LU))
+      if (!PI.runBeforePass<Loop>(Pass, *L))
         continue;
 
       PreservedAnalyses PassPA;
       {
         TimeTraceScope TimeScope(Pass.name());
-        PassPA = Pass.run(LU, AM, LAR, Updater);
+        PassPA = Pass.run(*L, LAM, LAR, Updater);
       }
 
-      // Do not pass deleted Loop unit into the instrumentation.
+      // Do not pass deleted Loop into the instrumentation.
       if (Updater.skipCurrentLoop())
+<<<<<<< HEAD
 <<<<<<< HEAD
         PI.runAfterPassInvalidated<Loop>(Pass, PassPA);
       else
@@ -362,17 +348,21 @@ public:
       else
         PI.runAfterPass<LoopUnitT>(Pass, LU);
 >>>>>>> 4f8dbd6fdd3... Generalize FunctionToLoopPassAdaptor for LoopNest pass
+=======
+        PI.runAfterPassInvalidated<Loop>(Pass);
+      else
+        PI.runAfterPass<Loop>(Pass, *L);
+>>>>>>> 7378649b673... Add LoopNest-related infrustructures
 
-      // FIXME: We should verify the set of analyses relevant to Loop unit
-      // passes are preserved.
+      // FIXME: We should verify the set of analyses relevant to Loop passes
+      // are preserved.
 
-      // If the loop unit hasn't been deleted, we need to handle invalidation
-      // here.
+      // If the loop hasn't been deleted, we need to handle invalidation here.
       if (!Updater.skipCurrentLoop())
-        // We know that the loop unit pass couldn't have invalidated any other
-        // loop unit's analyses (that's the contract of a loop unit pass), so
-        // directly handle the loop unit analysis manager's invalidation here.
-        AM.invalidate(LU, PassPA);
+        // We know that the loop pass couldn't have invalidated any other
+        // loop's analyses (that's the contract of a loop pass), so directly
+        // handle the loop analysis manager's invalidation here.
+        LAM.invalidate(*L, PassPA);
 
       // Then intersect the preserved set so that invalidation of module
       // analyses will eventually occur when the module pass completes.
@@ -384,11 +374,11 @@ public:
 #endif
 
     // By definition we preserve the proxy. We also preserve all analyses on
-    // Loop units. This precludes *any* invalidation of loop analyses by the
-    // proxy, but that's OK because we've taken care to invalidate analyses in
-    // the loop unit analysis manager incrementally above.
-    PA.preserveSet<AllAnalysesOn<LoopUnitT>>();
-    PA.preserve<AnalysisManagerProxyT>();
+    // Loops. This precludes *any* invalidation of loop analyses by the proxy,
+    // but that's OK because we've taken care to invalidate analyses in the
+    // loop analysis manager incrementally above.
+    PA.preserveSet<AllAnalysesOn<Loop>>();
+    PA.preserve<LoopAnalysisManagerFunctionProxy>();
     // We also preserve the set of standard analyses.
     PA.preserve<DominatorTreeAnalysis>();
     PA.preserve<LoopAnalysis>();
@@ -407,29 +397,12 @@ public:
   static bool isRequired() { return true; }
 
 private:
-  LoopUnitPassT Pass;
+  LoopPassT Pass;
+
   FunctionPassManager LoopCanonicalizationFPM;
+
   bool UseMemorySSA = false;
-  LoopUnitPassManagerMetadataT Metadata;
 };
-
-struct LoopPassManagerMetadata {
-  using PMUpdaterT = LPMUpdater;
-  using AnalysisManagerProxyT = LoopAnalysisManagerFunctionProxy;
-  using AnalysisManagerT = LoopAnalysisManager;
-
-  static void
-  appendLoopUnitsToWorklist(LoopInfo &LI,
-                            SmallPriorityWorklist<Loop *, 4> &Worklist) {
-    appendLoopsToWorklist(LI, Worklist);
-  }
-
-  Loop &getLoopUnit(Loop *L) const { return *L; }
-};
-
-template <typename LoopPassT>
-using FunctionToLoopPassAdaptor =
-    FunctionToLoopUnitPassAdaptor<Loop, LoopPassManagerMetadata, LoopPassT>;
 
 /// A function to deduce a loop pass type and wrap it in the templated
 /// adaptor.
@@ -453,6 +426,6 @@ public:
   PreservedAnalyses run(Loop &L, LoopAnalysisManager &,
                         LoopStandardAnalysisResults &, LPMUpdater &);
 };
-} // namespace llvm
+}
 
 #endif // LLVM_TRANSFORMS_SCALAR_LOOPPASSMANAGER_H
