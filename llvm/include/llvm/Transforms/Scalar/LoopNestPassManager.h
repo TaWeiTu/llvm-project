@@ -50,6 +50,20 @@ public:
     SkipCurrentLoopNest = true;
   }
 
+  /// Loop nest passes should use this method to indicate they have added new
+  /// loop nests to the current function.
+  ///
+  /// \p NewLoopNests must only contain top-level loops.
+  void addNewLoopNests(ArrayRef<Loop *> NewLoopNests) {
+    for (Loop *NewL : NewLoopNests) {
+#ifndef NDEBUG
+      assert(!NewL->getParentLoop() &&
+             "All of the new loops must be top-level!");
+#endif
+      Worklist.insert(NewL);
+    }
+  }
+
   void revisitCurrentLoopNest() {
     SkipCurrentLoopNest = true;
     Worklist.insert(CurrentLoopNest);
@@ -153,10 +167,10 @@ public:
       Updater.CurrentLoopNest = L;
       Updater.SkipCurrentLoopNest = false;
 
+      LoopNest &LN = LNAM.getLoopNest(*L, LAR);
       // Check the PassInstrumentation's BeforePass callbacks before running the
       // pass, skip its execution completely if asked to (callback returns
       // false).
-      LoopNest &LN = getLoopNest(L, LAR.SE);
       if (!PI.runBeforePass<LoopNest>(Pass, LN))
         continue;
 
@@ -208,16 +222,6 @@ private:
   LoopNestPassT Pass;
   bool UseMemorySSA;
   FunctionPassManager LoopCanonicalizationFPM;
-  SmallDenseMap<Loop *, std::unique_ptr<LoopNest>, 4> LoopNests;
-
-  /// Construct the actual LoopNest object on which the LoopNestPass runs. The
-  /// result will be cached in case the LoopNest is added back to the pipeline.
-  LoopNest &getLoopNest(Loop *L, ScalarEvolution &SE) {
-    auto &Ptr = LoopNests[L];
-    if (!Ptr)
-      Ptr = LoopNest::getLoopNest(*L, SE);
-    return *Ptr;
-  }
 };
 
 /// A function to deduce a loop nest pass type and wrap it in the templated
@@ -255,12 +259,11 @@ public:
 
   PreservedAnalyses run(LoopNest &LN, LoopNestAnalysisManager &AM,
                         LoopStandardAnalysisResults &LAR, LNPMUpdater &U) {
-    PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(LN);
+    PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(LN, LAR);
     PreservedAnalyses PA = PreservedAnalyses::all();
 
-    // Set up the loop analysis manager from its proxy.
-    LoopAnalysisManager &LAM =
-        AM.getResult<LoopAnalysisManagerLoopNestProxy>(LN).getManager();
+    // LoopAnalysisManager
+    LoopAnalysisManager &LAM = AM.getLoopAnalysisManager();
 
     SmallPriorityWorklist<Loop *, 4> Worklist;
     LPMUpdater Updater(Worklist, LAM);
@@ -294,16 +297,6 @@ public:
     } while (!Worklist.empty());
 
     PA.preserveSet<AllAnalysesOn<Loop>>();
-    PA.preserve<LoopAnalysisManagerLoopNestProxy>();
-    PA.preserve<DominatorTreeAnalysis>();
-    PA.preserve<LoopAnalysis>();
-    PA.preserve<ScalarEvolutionAnalysis>();
-    // FIXME: What we really want to do here is preserve an AA category, but
-    // that concept doesn't exist yet.
-    PA.preserve<AAManager>();
-    PA.preserve<BasicAA>();
-    PA.preserve<GlobalsAA>();
-    PA.preserve<SCEVAA>();
     return PA;
   }
 

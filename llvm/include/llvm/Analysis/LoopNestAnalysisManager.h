@@ -15,8 +15,97 @@
 
 namespace llvm {
 
-extern template class AnalysisManager<LoopNest>;
-using LoopNestAnalysisManager = AnalysisManager<LoopNest>;
+class LNPMUpdater;
+
+/// The loop nest analysis manager.
+///
+/// The loop nest analyses should run on \Loop instead of LoopNests since
+/// \c LoopNest are constantly invalidated by both loop nest passes and loop
+/// passes. Generally speaking, the passes should update the analysis results
+/// dynamically when possible, and running on Loops prevent the analyses from
+/// being invalidated when the loop structures change.
+///
+/// \c LoopNestAnalysisManager is a wrapper around \c LoopAnalysisManager and
+/// provide all the public APIs that \c AnalysisManager has so that is seems to
+/// be operating on \c LoopNest. \c LoopNestAnalysisManager also provides the
+/// ability to construct \c LoopNest from the top-level \c Loop. The loop nest
+/// analyses can also obtain the \c LoopNest object from the \c
+/// LoopAnalysisManager.
+///
+/// The \c LoopNest object will be invalidated after the loop nest passes unless
+/// \c LoopNestAnalysis is explicitly marked as preserved.
+class LoopNestAnalysisManager {
+public:
+  using ExtraArg = LoopStandardAnalysisResults &;
+  LoopNestAnalysisManager(LoopAnalysisManager &LAM) : InternalLAM(LAM) {}
+
+  bool empty() const { return InternalLAM.empty(); };
+
+  void clear(LoopNest &LN, llvm::StringRef Name) {
+    InternalLAM.clear(LN.getOutermostLoop(), Name);
+  }
+  void clear(Loop &L, llvm::StringRef Name) { InternalLAM.clear(L, Name); }
+  void clear() { InternalLAM.clear(); }
+
+  LoopNest &getLoopNest(Loop &Root, LoopStandardAnalysisResults &LAR) {
+    return InternalLAM.getResult<LoopNestAnalysis>(Root, LAR);
+  }
+
+  /// Get the result of an analysis pass for a given LoopNest.
+  ///
+  /// Runs the analysis if a cached result is not available.
+  template <typename PassT>
+  typename PassT::Result &getResult(LoopNest &LN,
+                                    LoopStandardAnalysisResults &LAR) {
+    return InternalLAM.getResult<PassT>(LN.getOutermostLoop(), LAR);
+  }
+  template <typename PassT>
+  typename PassT::Result &getResult(Loop &L, LoopStandardAnalysisResults &LAR) {
+    return InternalLAM.getResult<PassT>(L, LAR);
+  }
+
+  /// Get the cached result of an analysis pass for a given LoopNest.
+  ///
+  /// This method never runs the analysis.
+  ///
+  /// \returns null if there is no cached result.
+  template <typename PassT>
+  typename PassT::Result *getCachedResult(LoopNest &LN) const {
+    return InternalLAM.getCachedResult<PassT>(LN.getOutermostLoop());
+  }
+  template <typename PassT>
+  typename PassT::Result *getCachedResult(Loop &L) const {
+    return InternalLAM.getCachedResult<PassT>(L);
+  }
+
+  template <typename PassT>
+  void verifyNotInvalidated(LoopNest &LN,
+                            typename PassT::Result *Result) const {
+    InternalLAM.verifyNotInvalidated<PassT>(LN.getOutermostLoop(), Result);
+  }
+  template <typename PassT>
+  void verifyNotInvalidated(Loop &L, typename PassT::Result *Result) const {
+    InternalLAM.verifyNotInvalidated<PassT>(L, Result);
+  }
+
+  template <typename PassBuilderT>
+  bool registerPass(PassBuilderT &&PassBuilder) {
+    return InternalLAM.registerPass(PassBuilder);
+  }
+
+  void invalidate(LoopNest &LN, const PreservedAnalyses &PA) {
+    InternalLAM.invalidate(LN.getOutermostLoop(), PA);
+  }
+  void invalidate(Loop &L, const PreservedAnalyses &PA) {
+    InternalLAM.invalidate(L, PA);
+  }
+
+  LoopAnalysisManager &getLoopAnalysisManager() { return InternalLAM; }
+
+private:
+  LoopAnalysisManager &InternalLAM;
+  friend class InnerAnalysisManagerProxy<LoopNestAnalysisManager, Function>;
+};
 
 using LoopNestAnalysisManagerFunctionProxy =
     InnerAnalysisManagerProxy<LoopNestAnalysisManager, Function>;
@@ -89,9 +178,11 @@ LoopNestAnalysisManagerFunctionProxy::run(Function &F,
 extern template class InnerAnalysisManagerProxy<LoopNestAnalysisManager,
                                                 Function>;
 
-extern template class InnerAnalysisManagerProxy<LoopAnalysisManager, LoopNest>;
-using LoopAnalysisManagerLoopNestProxy =
-    InnerAnalysisManagerProxy<LoopAnalysisManager, LoopNest>;
+extern template class OuterAnalysisManagerProxy<
+    FunctionAnalysisManager, LoopNest, LoopStandardAnalysisResults &>;
+using FunctionAnalysisManagerLoopNestProxy =
+    OuterAnalysisManagerProxy<FunctionAnalysisManager, LoopNest,
+                              LoopStandardAnalysisResults &>;
 
 } // namespace llvm
 

@@ -23,6 +23,8 @@ namespace llvm {
 template class AnalysisManager<LoopNest>;
 template class InnerAnalysisManagerProxy<LoopNestAnalysisManager, Function>;
 template class InnerAnalysisManagerProxy<LoopAnalysisManager, LoopNest>;
+template class OuterAnalysisManagerProxy<FunctionAnalysisManager, LoopNest,
+                                         LoopStandardAnalysisResults &>;
 
 bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
     Function &F, const PreservedAnalyses &PA,
@@ -32,27 +34,64 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
     return false; // This is still a valid proxy.
 
   auto PAC = PA.getChecker<LoopNestAnalysisManagerFunctionProxy>();
+  bool invalidateMemorySSAAnalysis = false;
+  if (MSSAUsed)
+    invalidateMemorySSAAnalysis = Inv.invalidate<MemorySSAAnalysis>(F, PA);
   if (!PAC.preserved() && !PAC.preservedSet<AllAnalysesOn<Function>>()) {
     if (Inv.invalidate<AAManager>(F, PA) ||
         Inv.invalidate<AssumptionAnalysis>(F, PA) ||
         Inv.invalidate<DominatorTreeAnalysis>(F, PA) ||
         Inv.invalidate<LoopAnalysis>(F, PA) ||
-        Inv.invalidate<ScalarEvolutionAnalysis>(F, PA)) {
+        Inv.invalidate<ScalarEvolutionAnalysis>(F, PA) ||
+        invalidateMemorySSAAnalysis) {
       InnerAM->clear();
       return true;
     }
   }
 
-  // bool AreFunctionAnalysesPreserved;
-  // TODO: unimplemented
-  return false;
-}
+  // Directly check if the relevant set is preserved.
+  bool AreLoopNestAnalysesPreserved =
+      PA.allAnalysesInSetPreserved<AllAnalysesOn<LoopNest>>();
 
-template <>
-bool LoopAnalysisManagerLoopNestProxy::Result::invalidate(
-    LoopNest &LN, const PreservedAnalyses &PA,
-    LoopNestAnalysisManager::Invalidator &Inv) {
-  // TODO: unimplemented
+  const std::vector<Loop *> &Loops = LI->getTopLevelLoops();
+  for (Loop *L : Loops) {
+    Optional<PreservedAnalyses> LoopNestPA;
+
+    // Check to see whether the preserved set needs to be pruned based on
+    // function-level analysis invalidation that triggers deferred invalidation
+    // registered with the outer analysis manager proxy for this loop nest.
+
+    // FIXME: Figure out a way to construct loop nest here.
+    if (auto *OuterProxy =
+            InnerAM->getCachedResult<FunctionAnalysisManagerLoopNestProxy>(
+                *L)) {
+      for (const auto &OuterInvalidationPair :
+           OuterProxy->getOuterInvalidations()) {
+        AnalysisKey *OuterAnalysisID = OuterInvalidationPair.first;
+        const auto &InnerAnalysisIDs = OuterInvalidationPair.second;
+        if (Inv.invalidate(OuterAnalysisID, F, PA)) {
+          if (!LoopNestPA)
+            LoopNestPA = PA;
+          for (AnalysisKey *InnerAnalysisID : InnerAnalysisIDs)
+            LoopNestPA->abandon(InnerAnalysisID);
+        }
+      }
+    }
+
+    // Check if we needed a custom PA set, and if so we'll need to run the
+    // inner invalidation.
+    if (LoopNestPA) {
+      InnerAM->invalidate(*L, *LoopNestPA);
+      continue;
+    }
+
+    // Otherwise we only need to do invalidation if the original PA set didn't
+    // preserve all loop nest analyses.
+    if (!AreLoopNestAnalysesPreserved)
+      InnerAM->invalidate(*L, PA);
+  }
+
+  // Return false to indicate that this result is still a valid proxy.
   return false;
 }
 

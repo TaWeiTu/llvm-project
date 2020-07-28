@@ -22,7 +22,7 @@ TEST(LICMTest, TestSCEVInvalidationOnHoisting) {
   ModulePassManager MPM;
   PassBuilder PB;
   LoopAnalysisManager LAM;
-  LoopNestAnalysisManager LNAM;
+  LoopNestAnalysisManager LNAM(LAM);
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager MAM;

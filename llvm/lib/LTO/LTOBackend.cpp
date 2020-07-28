@@ -210,7 +210,7 @@ static void runNewPMPasses(const Config &Conf, Module &Mod, TargetMachine *TM,
   RegisterPassPlugins(Conf.PassPlugins, PB);
 
   LoopAnalysisManager LAM(Conf.DebugPassManager);
-  LoopNestAnalysisManager LNAM(Conf.DebugPassManager);
+  LoopNestAnalysisManager LNAM(LAM);
   FunctionAnalysisManager FAM(Conf.DebugPassManager);
   CGSCCAnalysisManager CGAM(Conf.DebugPassManager);
   ModuleAnalysisManager MAM(Conf.DebugPassManager);
@@ -274,7 +274,7 @@ static void runNewPMCustomPasses(const Config &Conf, Module &Mod,
   RegisterPassPlugins(Conf.PassPlugins, PB);
 
   LoopAnalysisManager LAM;
-  LoopNestAnalysisManager LNAM;
+  LoopNestAnalysisManager LNAM(LAM);
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager MAM;

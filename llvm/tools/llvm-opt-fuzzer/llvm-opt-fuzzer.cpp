@@ -136,7 +136,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
   PassBuilder PB(TM.get());
 
   LoopAnalysisManager LAM;
-  LoopNestAnalysisManager LNAM;
+  LoopNestAnalysisManager LNAM(LAM);
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
   ModulePassManager MPM;

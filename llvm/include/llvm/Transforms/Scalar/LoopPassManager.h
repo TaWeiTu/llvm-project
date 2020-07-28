@@ -105,6 +105,7 @@ using RequireAnalysisLoopPass =
                         LoopStandardAnalysisResults &, LPMUpdater &>;
 
 template <typename LoopPassT> class FunctionToLoopPassAdaptor;
+template <typename LoopPassT> class LoopNestToLoopPassAdaptor;
 
 /// This class provides an interface for updating the loop pass manager based
 /// on mutations to the loop nest.
