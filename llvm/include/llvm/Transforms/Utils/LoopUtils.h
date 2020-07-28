@@ -432,6 +432,12 @@ void appendReversedLoopsToWorklist(RangeT &&,
 /// FIXME: Consider changing the order in LoopInfo.
 void appendLoopsToWorklist(LoopInfo &, SmallPriorityWorklist<Loop *, 4> &);
 
+/// Utility that implements appending of all loops in a loop nest (rooted at \p
+/// Root) onto a worklist. Since appendLoopsToWorklist(Loop &) only pushes
+/// subloops, the root loop will be pushed into the worklist first in this
+/// function.
+void appendLoopNestToWorklist(Loop &Root, SmallPriorityWorklist<Loop *, 4> &);
+
 /// Recursively clone the specified loop and all of its children,
 /// mapping the blocks with the specified map.
 Loop *cloneLoop(Loop *L, Loop *PL, ValueToValueMapTy &VM,

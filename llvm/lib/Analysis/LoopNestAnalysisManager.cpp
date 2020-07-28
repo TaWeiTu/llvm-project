@@ -33,6 +33,8 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
   if (PA.areAllPreserved())
     return false; // This is still a valid proxy.
 
+  const std::vector<Loop *> &Loops = LI->getTopLevelLoops();
+
   auto PAC = PA.getChecker<LoopNestAnalysisManagerFunctionProxy>();
   bool invalidateMemorySSAAnalysis = false;
   if (MSSAUsed)
@@ -44,7 +46,17 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
         Inv.invalidate<LoopAnalysis>(F, PA) ||
         Inv.invalidate<ScalarEvolutionAnalysis>(F, PA) ||
         invalidateMemorySSAAnalysis) {
-      InnerAM->clear();
+      // Note that the LoopInfo may be stale at this point, however the loop
+      // objects themselves remain the only viable keys that could be in the
+      // analysis manager's cache. So we just walk the keys and forcibly clear
+      // those results. Note that the order doesn't matter here as this will
+      // just directly destroy the results without calling methods on them.
+      //
+      // Though we're dealing with loop nests here, the analysis results can
+      // still be cleared via the root loops.
+      for (Loop *L : Loops)
+        InnerAM->clear(*L, "<possibly invalidated loop>");
+      InnerAM = nullptr;
       return true;
     }
   }
@@ -53,15 +65,12 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
   bool AreLoopNestAnalysesPreserved =
       PA.allAnalysesInSetPreserved<AllAnalysesOn<LoopNest>>();
 
-  const std::vector<Loop *> &Loops = LI->getTopLevelLoops();
   for (Loop *L : Loops) {
     Optional<PreservedAnalyses> LoopNestPA;
 
     // Check to see whether the preserved set needs to be pruned based on
     // function-level analysis invalidation that triggers deferred invalidation
     // registered with the outer analysis manager proxy for this loop nest.
-
-    // FIXME: Figure out a way to construct loop nest here.
     if (auto *OuterProxy =
             InnerAM->getCachedResult<FunctionAnalysisManagerLoopNestProxy>(
                 *L)) {

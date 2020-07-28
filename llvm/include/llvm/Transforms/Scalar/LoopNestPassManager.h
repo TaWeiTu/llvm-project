@@ -108,10 +108,10 @@ public:
   }
 
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
-    // Before we even compute any loop analyses, first run a miniature function
-    // pass pipeline to put loops into their canonical form. Note that we can
-    // directly build up function analyses after this as the function pass
-    // manager handles all the invalidation at that layer.
+    // Before we even compute any loop nest analyses, first run a miniature
+    // function pass pipeline to put loops into their canonical form. Note that
+    // we can directly build up function analyses after this as the function
+    // pass manager handles all the invalidation at that layer.
     PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(F);
 
     PreservedAnalyses PA = PreservedAnalyses::all();
@@ -235,7 +235,7 @@ createFunctionToLoopNestPassAdaptor(LoopNestPassT Pass,
       std::move(Pass), UseMemorySSA, DebugLogging);
 }
 
-/// Pass for printing a loop nest's contents as textual IR. This is similar to
+/// Pass for printing a loop nest's property. This is similar to
 /// \c LoopNestPrinterPass in \file LoopNestAnalysis.h but implemented as a
 /// LoopNestPass.
 class PrintLoopNestPass : public PassInfoMixin<PrintLoopNestPass> {
@@ -263,17 +263,18 @@ public:
     PreservedAnalyses PA = PreservedAnalyses::all();
 
     // Get the loop analysis manager from the loop nest analysis manager. No
-    // need to set up proxy here since currently for latter is simply a wrapper
+    // need to set up proxy here since currently the latter is simply a wrapper
     // around the former.
     LoopAnalysisManager &LAM = AM.getLoopAnalysisManager();
 
     SmallPriorityWorklist<Loop *, 4> Worklist;
     LPMUpdater Updater(Worklist, LAM);
-    appendLoopsToWorklist(LN.getOutermostLoop(), Worklist);
+    appendLoopNestToWorklist(LN.getOutermostLoop(), Worklist);
 
     assert(!Worklist.empty() &&
            "Worklist should be non-empty since we're running on a LoopNest");
     do {
+      if (Worklist.empty()) dbgs() << "WTF\n";
       Loop *L = Worklist.pop_back_val();
       Updater.CurrentL = L;
       Updater.SkipCurrentLoop = false;
@@ -298,6 +299,9 @@ public:
       PA.intersect(std::move(PassPA));
     } while (!Worklist.empty());
 
+    // We don't have to explicitly mark the loop standard analysis results as
+    // preserved here since this will eventually be handled by the \c
+    // FunctionToLoopNestPassAdaptor.
     PA.preserveSet<AllAnalysesOn<Loop>>();
     return PA;
   }
@@ -305,6 +309,14 @@ public:
 private:
   LoopPassT Pass;
 };
+
+/// A function to deduce a loop pass type and wrap it in the templated
+/// adaptor.
+template <typename LoopPassT>
+LoopNestToLoopPassAdaptor<LoopPassT>
+createLoopNestToLoopPassAdaptor(LoopPassT Pass) {
+  return LoopNestToLoopPassAdaptor<LoopPassT>(std::move(Pass));
+}
 
 } // namespace llvm
 

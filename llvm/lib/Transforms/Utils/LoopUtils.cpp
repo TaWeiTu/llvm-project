@@ -1537,6 +1537,12 @@ void llvm::appendLoopsToWorklist(LoopInfo &LI,
   appendReversedLoopsToWorklist(LI, Worklist);
 }
 
+void llvm::appendLoopNestToWorklist(
+    Loop &Root, SmallPriorityWorklist<Loop *, 4> &Worklist) {
+  Worklist.insert(&Root);
+  appendLoopsToWorklist(Root, Worklist);
+}
+
 Loop *llvm::cloneLoop(Loop *L, Loop *PL, ValueToValueMapTy &VM,
                       LoopInfo *LI, LPPassManager *LPM) {
   Loop &New = *LI->AllocateLoop();

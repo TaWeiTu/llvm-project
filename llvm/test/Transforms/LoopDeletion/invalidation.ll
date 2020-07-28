@@ -4,7 +4,11 @@
 ;
 ; RUN: opt < %s -passes='require<iv-users>,no-op-loop,require<iv-users>' -S \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK,BEFORE
+; RUN: opt < %s -passes='loop-nest(loop(require<iv-users>,no-op-loop,require<iv-users>))' -S \
+; RUN:     | FileCheck %s --check-prefixes=CHECK,BEFORE
 ; RUN: opt < %s -passes='require<iv-users>,loop-deletion,require<iv-users>' -S \
+; RUN:     | FileCheck %s --check-prefixes=CHECK,AFTER
+; RUN: opt < %s -passes='loop-nest(loop(require<iv-users>,loop-deletion,require<iv-users>))' -S \
 ; RUN:     | FileCheck %s --check-prefixes=CHECK,AFTER
 
 

@@ -2577,6 +2577,19 @@ Error PassBuilder::parseLoopNestPass(LoopNestPassManager &LNPM,
       LNPM.addPass(std::move(NestedLNPM));
       return Error::success();
     }
+    // Loop passes can be wrapped in a loop nest pass via \c
+    // LoopNestToLoopPassAdaptor.
+    if (Name == "loop" || Name == "loop-mssa") {
+      dbgs() << "wrapping loop passes in loop nest pass"
+             << "\n";
+      LoopPassManager LPM(DebugLogging);
+      if (auto Err = parseLoopPassPipeline(LPM, InnerPipeline, VerifyEachPass,
+                                           DebugLogging))
+        return Err;
+      // bool UseMemorySSA = (Name == "loop-mssa");
+      LNPM.addPass(createLoopNestToLoopPassAdaptor(std::move(LPM)));
+      return Error::success();
+    }
     if (auto Count = parseRepeatPassName(Name)) {
       LoopNestPassManager NestedLNPM(DebugLogging);
       if (auto Err = parseLoopNestPassPipeline(NestedLNPM, InnerPipeline,
