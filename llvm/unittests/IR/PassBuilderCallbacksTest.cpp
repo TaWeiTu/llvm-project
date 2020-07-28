@@ -282,6 +282,8 @@ template <> std::string getName(const llvm::Any &WrappedIR) {
     return any_cast<const Module *>(WrappedIR)->getName().str();
   if (any_isa<const Function *>(WrappedIR))
     return any_cast<const Function *>(WrappedIR)->getName().str();
+  if (any_isa<const LoopNest *>(WrappedIR))
+    return any_cast<const LoopNest *>(WrappedIR)->getName().str();
   if (any_isa<const Loop *>(WrappedIR))
     return any_cast<const Loop *>(WrappedIR)->getName().str();
   if (any_isa<const LazyCallGraph::SCC *>(WrappedIR))
@@ -382,8 +384,6 @@ struct MockPassInstrumentationCallbacks {
         .Times(AnyNumber());
   }
 };
-
-template <typename PassManagerT> class PassBuilderCallbacksTest;
 
 /// This test fixture is shared between all the actual tests below and
 /// takes care of setting up appropriate defaults.
@@ -493,6 +493,7 @@ protected:
 using ModuleCallbacksTest = PassBuilderCallbacksTest<ModulePassManager>;
 using CGSCCCallbacksTest = PassBuilderCallbacksTest<CGSCCPassManager>;
 using FunctionCallbacksTest = PassBuilderCallbacksTest<FunctionPassManager>;
+using LoopNestCallbacksTest = PassBuilderCallbacksTest<LoopNestPassManager>;
 using LoopCallbacksTest = PassBuilderCallbacksTest<LoopPassManager>;
 
 /// Test parsing of the name of our mock pass for all IRUnits.
@@ -771,6 +772,17 @@ TEST_F(FunctionCallbacksTest, InstrumentedSkippedPasses) {
   EXPECT_CALL(CallbacksHandle,
               runAfterAnalysis(HasNameRegex("MockAnalysisHandle"), _))
       .Times(0);
+
+  StringRef PipelineText = "test-transform";
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText, true), Succeeded())
+      << "Pipeline was: " << PipelineText;
+  PM.run(*M, AM);
+}
+
+TEST_F(LoopNestCallbacksTest, Passes) {
+  EXPECT_CALL(AnalysisHandle, run(HasName("loop"), _, _));
+  EXPECT_CALL(PassHandle, run(HasName("loop"), _, _, _))
+      .WillOnce(WithArgs<0, 1, 2>(Invoke(getAnalysisResult)));
 
   StringRef PipelineText = "test-transform";
   ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText, true), Succeeded())

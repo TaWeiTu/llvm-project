@@ -2788,9 +2788,6 @@ void PassBuilder::crossRegisterProxies(LoopAnalysisManager &LAM,
   FAM.registerPass([&] { return ModuleAnalysisManagerFunctionProxy(MAM); });
   FAM.registerPass([&] { return LoopNestAnalysisManagerFunctionProxy(LNAM); });
   FAM.registerPass([&] { return LoopAnalysisManagerFunctionProxy(LAM); });
-  // LNAM.registerPass([&] { return LoopNestAnalysisManagerFunctionProxy(FAM); });
-  // LNAM.registerPass([&] { return LoopAnalysisManagerLoopNestProxy(LAM); });
-  // LNAM.registerPass([&] { return LoopNestAnalysisManagerLoopProxy(LAM); });
   LAM.registerPass([&] { return FunctionAnalysisManagerLoopProxy(FAM); });
 }
 
