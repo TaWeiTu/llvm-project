@@ -1192,7 +1192,7 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
 #include "llvm/Support/Extension.def"
 
   LoopAnalysisManager LAM(CodeGenOpts.DebugPassManager);
-  LoopNestAnalysisManager LNAM(CodeGenOpts.DebugPassManager);
+  LoopNestAnalysisManager LNAM(LAM);
   FunctionAnalysisManager FAM(CodeGenOpts.DebugPassManager);
   CGSCCAnalysisManager CGAM(CodeGenOpts.DebugPassManager);
   ModuleAnalysisManager MAM(CodeGenOpts.DebugPassManager);

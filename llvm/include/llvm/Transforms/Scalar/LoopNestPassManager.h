@@ -262,7 +262,9 @@ public:
     PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(LN, LAR);
     PreservedAnalyses PA = PreservedAnalyses::all();
 
-    // LoopAnalysisManager
+    // Get the loop analysis manager from the loop nest analysis manager. No
+    // need to set up proxy here since currently for latter is simply a wrapper
+    // around the former.
     LoopAnalysisManager &LAM = AM.getLoopAnalysisManager();
 
     SmallPriorityWorklist<Loop *, 4> Worklist;
