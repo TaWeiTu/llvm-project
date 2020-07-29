@@ -68,10 +68,9 @@ PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
     if (!U.skipCurrentLoopNest())
       AM.invalidate(LN, PassPA);
 
-    if (!isLoopNestPreserved) {
+    if (!isLoopNestPreserved)
       // The LoopNest structure had been altered, reconstruct it here.
       LN.reconstructInplace(AR.SE);
-    }
     PA.intersect(std::move(PassPA));
   }
 

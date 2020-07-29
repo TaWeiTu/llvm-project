@@ -34,10 +34,27 @@ class LNPMUpdater;
 ///
 /// The \c LoopNest object will be invalidated after the loop nest passes unless
 /// \c LoopNestAnalysis is explicitly marked as preserved.
-class LoopNestAnalysisManager {
+template <> class AnalysisManager<LoopNest, LoopStandardAnalysisResults &> {
 public:
-  using ExtraArg = LoopStandardAnalysisResults &;
-  LoopNestAnalysisManager(LoopAnalysisManager &LAM) : InternalLAM(LAM) {}
+  class Invalidator {
+  public:
+    /// The following methods should never be called because the
+    /// invalidation in \c LoopNestAnalysisManager will be passed to the
+    /// internal \c LoopAnalysisManager. The only purpose of these methods is to
+    /// satisfy the requirements of being an \c AnalysisManager.
+    template <typename PassT>
+    bool invalidate(LoopNest &, const PreservedAnalyses &) {
+      assert(false && "This method should never be called.");
+      return false;
+    }
+
+    bool invalidate(AnalysisKey *, LoopNest &, const PreservedAnalyses &) {
+      assert(false && "This method should never be called.");
+      return false;
+    }
+  };
+
+  AnalysisManager(LoopAnalysisManager &LAM) : InternalLAM(LAM) {}
 
   bool empty() const { return InternalLAM.empty(); };
 
@@ -104,8 +121,12 @@ public:
 
 private:
   LoopAnalysisManager &InternalLAM;
-  friend class InnerAnalysisManagerProxy<LoopNestAnalysisManager, Function>;
+  friend class InnerAnalysisManagerProxy<
+      AnalysisManager<LoopNest, LoopStandardAnalysisResults &>, Function>;
 };
+
+using LoopNestAnalysisManager =
+    AnalysisManager<LoopNest, LoopStandardAnalysisResults &>;
 
 using LoopNestAnalysisManagerFunctionProxy =
     InnerAnalysisManagerProxy<LoopNestAnalysisManager, Function>;

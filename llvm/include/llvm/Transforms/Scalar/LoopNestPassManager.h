@@ -297,7 +297,6 @@ public:
     assert(!Worklist.empty() &&
            "Worklist should be non-empty since we're running on a LoopNest");
     do {
-      if (Worklist.empty()) dbgs() << "WTF\n";
       Loop *L = Worklist.pop_back_val();
       Updater.CurrentL = L;
       Updater.SkipCurrentLoop = false;

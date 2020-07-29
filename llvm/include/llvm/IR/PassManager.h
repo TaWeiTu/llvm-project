@@ -440,14 +440,6 @@ getAnalysisResult(AnalysisManager<IRUnitT, AnalysisArgTs...> &AM, IRUnitT &IR,
                            std::index_sequence_for<AnalysisArgTs...>{});
 }
 
-template <typename PassT, typename IRUnitT, typename AnalysisManagerT,
-          typename... MainArgTs>
-typename PassT::Result getAnalysisResult(AnalysisManagerT &AM, IRUnitT &IR,
-                                         std::tuple<MainArgTs...> Args) {
-  return AM.template getResult<PassT>(
-      IR, std::get<typename AnalysisManagerT::ExtraArg>(Args));
-}
-
 } // namespace detail
 
 // Forward declare the pass instrumentation analysis explicitly queried in
