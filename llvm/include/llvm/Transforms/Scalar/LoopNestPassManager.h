@@ -20,12 +20,35 @@ namespace llvm {
 
 class LNPMUpdater;
 
+template <>
+PreservedAnalyses
+PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
+            LNPMUpdater &>::run(LoopNest &LN, LoopNestAnalysisManager &AM,
+                                LoopStandardAnalysisResults &AR,
+                                LNPMUpdater &U);
+
 extern template class PassManager<LoopNest, LoopNestAnalysisManager,
                                   LoopStandardAnalysisResults &, LNPMUpdater &>;
 
 using LoopNestPassManager =
     PassManager<LoopNest, LoopNestAnalysisManager,
                 LoopStandardAnalysisResults &, LNPMUpdater &>;
+
+/// A partial specialization of the require analysis template pass to forward
+/// the extra parameters from a transformation's run method to the
+/// AnalysisManager's getResult.
+template <typename AnalysisT>
+struct RequireAnalysisPass<AnalysisT, LoopNest, LoopNestAnalysisManager,
+                           LoopStandardAnalysisResults &, LNPMUpdater &>
+    : PassInfoMixin<
+          RequireAnalysisPass<AnalysisT, LoopNest, LoopNestAnalysisManager,
+                              LoopStandardAnalysisResults &, LNPMUpdater &>> {
+  PreservedAnalyses run(LoopNest &LN, LoopNestAnalysisManager &AM,
+                        LoopStandardAnalysisResults &AR, LNPMUpdater &) {
+    (void)AM.template getResult<AnalysisT>(LN, AR);
+    return PreservedAnalyses::all();
+  }
+};
 
 /// This class provides an interface for updating the loop nest pass manager
 /// based on mutations to the loop nest.

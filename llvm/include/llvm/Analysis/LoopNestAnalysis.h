@@ -16,6 +16,7 @@
 
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/IR/PassManager.h"
 
 namespace llvm {
 
@@ -133,8 +134,11 @@ public:
     return Root.getName();
   }
 
+  /// Reconstruct the loop nest inplace.
+  void reconstructInplace(ScalarEvolution &SE);
+
 protected:
-  const unsigned MaxPerfectDepth; // maximum perfect nesting depth level.
+  unsigned MaxPerfectDepth; // maximum perfect nesting depth level.
   LoopVectorTy Loops; // the loops in the nest (in breadth first order).
 };
 

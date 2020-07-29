@@ -175,6 +175,24 @@ struct MockPassHandle<Loop>
 };
 
 template <>
+struct MockPassHandle<LoopNest>
+    : MockPassHandleBase<MockPassHandle<LoopNest>, LoopNest,
+                         LoopNestAnalysisManager, LoopStandardAnalysisResults &,
+                         LNPMUpdater &> {
+  MOCK_METHOD4(run,
+               PreservedAnalyses(LoopNest &, LoopNestAnalysisManager &,
+                                 LoopStandardAnalysisResults &, LNPMUpdater &));
+
+  static void invalidateLoopNest(LoopNest &LN, LoopNestAnalysisManager &,
+                                 LoopStandardAnalysisResults &,
+                                 LNPMUpdater &Updater) {
+    Updater.markLoopNestAsDeleted(LN, LN.getName());
+  }
+
+  MockPassHandle() { setDefaults(); }
+};
+
+template <>
 struct MockPassHandle<Function>
     : MockPassHandleBase<MockPassHandle<Function>, Function> {
   MOCK_METHOD2(run, PreservedAnalyses(Function &, FunctionAnalysisManager &));
@@ -224,6 +242,20 @@ struct MockAnalysisHandle<Loop>
                                   LoopAnalysisManager::Invalidator &));
 
   MockAnalysisHandle<Loop>() { this->setDefaults(); }
+};
+
+template <>
+struct MockAnalysisHandle<LoopNest>
+    : MockAnalysisHandleBase<MockAnalysisHandle<LoopNest>, Loop,
+                             LoopAnalysisManager,
+                             LoopStandardAnalysisResults &> {
+  MOCK_METHOD3_T(run, typename Analysis::Result(Loop &, LoopAnalysisManager &,
+                                                LoopStandardAnalysisResults &));
+
+  MOCK_METHOD3_T(invalidate, bool(Loop &, const PreservedAnalyses &,
+                                  LoopAnalysisManager::Invalidator &));
+
+  MockAnalysisHandle<LoopNest>() { this->setDefaults(); }
 };
 
 template <>
@@ -282,6 +314,8 @@ template <> std::string getName(const llvm::Any &WrappedIR) {
     return any_cast<const Module *>(WrappedIR)->getName().str();
   if (any_isa<const Function *>(WrappedIR))
     return any_cast<const Function *>(WrappedIR)->getName().str();
+  if (any_isa<const LoopNest *>(WrappedIR))
+    return any_cast<const LoopNest *>(WrappedIR)->getName().str();
   if (any_isa<const Loop *>(WrappedIR))
     return any_cast<const Loop *>(WrappedIR)->getName().str();
   if (any_isa<const LazyCallGraph::SCC *>(WrappedIR))
@@ -490,9 +524,104 @@ protected:
   }
 };
 
+template <>
+class PassBuilderCallbacksTest<LoopNestPassManager> : public testing::Test {
+protected:
+  using AnalysisT = typename MockAnalysisHandle<LoopNest>::Analysis;
+  LLVMContext Context;
+  std::unique_ptr<Module> M;
+
+  MockPassInstrumentationCallbacks CallbacksHandle;
+
+  PassBuilder PB;
+  ModulePassManager PM;
+  LoopAnalysisManager LAM;
+  LoopNestAnalysisManager LNAM;
+  FunctionAnalysisManager FAM;
+  CGSCCAnalysisManager CGAM;
+  ModuleAnalysisManager AM;
+
+  MockPassHandle<LoopNest> PassHandle;
+  MockAnalysisHandle<LoopNest> AnalysisHandle;
+
+  static PreservedAnalyses getAnalysisResult(LoopNest &L,
+                                             LoopNestAnalysisManager &AM,
+                                             LoopStandardAnalysisResults &AR) {
+    (void)AM.getResult<AnalysisT>(L, AR);
+    return PreservedAnalyses::all();
+  }
+
+  PassBuilderCallbacksTest()
+      : M(parseIR(Context,
+                  "declare void @bar()\n"
+                  "define void @foo(i32 %n) {\n"
+                  "entry:\n"
+                  "  br label %loop\n"
+                  "loop:\n"
+                  "  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop ]\n"
+                  "  %iv.next = add i32 %iv, 1\n"
+                  "  tail call void @bar()\n"
+                  "  %cmp = icmp eq i32 %iv, %n\n"
+                  "  br i1 %cmp, label %exit, label %loop\n"
+                  "exit:\n"
+                  "  ret void\n"
+                  "}\n")),
+        CallbacksHandle(),
+        PB(nullptr, PipelineTuningOptions(), None, &CallbacksHandle.Callbacks),
+        PM(true), LAM(true), LNAM(LAM), FAM(true), CGAM(true), AM(true) {
+
+    EXPECT_TRUE(&CallbacksHandle.Callbacks ==
+                PB.getPassInstrumentationCallbacks());
+
+    /// Register a callback for analysis registration.
+    ///
+    /// The callback is a function taking a reference to an AnalyisManager
+    /// object. When called, the callee gets to register its own analyses with
+    /// this PassBuilder instance.
+    PB.registerAnalysisRegistrationCallback(
+        [this](LoopNestAnalysisManager &AM) {
+          // Register our mock analysis
+          dbgs() << "register analysis" << "\n";
+          AM.registerPass([this] { return AnalysisHandle.getAnalysis(); });
+        });
+
+    /// Register a callback for pipeline parsing.
+    ///
+    /// During parsing of a textual pipeline, the PassBuilder will call these
+    /// callbacks for each encountered pass name that it does not know. This
+    /// includes both simple pass names as well as names of sub-pipelines. In
+    /// the latter case, the InnerPipeline is not empty.
+    PB.registerPipelineParsingCallback(
+        [this](StringRef Name, LoopNestPassManager &PM,
+               ArrayRef<PassBuilder::PipelineElement> InnerPipeline) {
+          /// Handle parsing of the names of analysis utilities such as
+          /// require<test-analysis> and invalidate<test-analysis> for our
+          /// analysis mock handle
+          if (parseAnalysisUtilityPasses<AnalysisT>("test-analysis", Name, PM))
+            return true;
+
+          /// Parse the name of our pass mock handle
+          if (Name == "test-transform") {
+            PM.addPass(PassHandle.getPass());
+            return true;
+          }
+          return false;
+        });
+
+    /// Register builtin analyses and cross-register the analysis proxies
+    PB.registerModuleAnalyses(AM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.registerLoopNestAnalyses(LNAM);
+    PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, AM);
+  }
+};
+
 using ModuleCallbacksTest = PassBuilderCallbacksTest<ModulePassManager>;
 using CGSCCCallbacksTest = PassBuilderCallbacksTest<CGSCCPassManager>;
 using FunctionCallbacksTest = PassBuilderCallbacksTest<FunctionPassManager>;
+using LoopNestCallbacksTest = PassBuilderCallbacksTest<LoopNestPassManager>;
 using LoopCallbacksTest = PassBuilderCallbacksTest<LoopPassManager>;
 
 /// Test parsing of the name of our mock pass for all IRUnits.
@@ -764,6 +893,136 @@ TEST_F(FunctionCallbacksTest, InstrumentedSkippedPasses) {
       .Times(0);
   EXPECT_CALL(CallbacksHandle,
               runAfterPass(HasNameRegex("MockPassHandle"), _, _))
+      .Times(0);
+  EXPECT_CALL(CallbacksHandle,
+              runBeforeAnalysis(HasNameRegex("MockAnalysisHandle"), _))
+      .Times(0);
+  EXPECT_CALL(CallbacksHandle,
+              runAfterAnalysis(HasNameRegex("MockAnalysisHandle"), _))
+      .Times(0);
+
+  StringRef PipelineText = "test-transform";
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText, true), Succeeded())
+      << "Pipeline was: " << PipelineText;
+  PM.run(*M, AM);
+}
+
+TEST_F(LoopNestCallbacksTest, Passes) {
+  EXPECT_CALL(AnalysisHandle, run(HasName("loop"), _, _));
+  EXPECT_CALL(PassHandle, run(HasName("loop"), _, _, _))
+      .WillOnce(WithArgs<0, 1, 2>(Invoke(getAnalysisResult)));
+  StringRef PipelineText = "test-transform";
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText, true), Succeeded())
+      << "Pipeline was: " << PipelineText;
+  PM.run(*M, AM);
+}
+
+TEST_F(LoopNestCallbacksTest, InstrumentedPasses) {
+  CallbacksHandle.registerPassInstrumentation();
+  // Non-mock instrumentation not specifically mentioned below can be ignored.
+  CallbacksHandle.ignoreNonMockPassInstrumentation("<string>");
+  CallbacksHandle.ignoreNonMockPassInstrumentation("foo");
+  CallbacksHandle.ignoreNonMockPassInstrumentation("loop");
+
+  EXPECT_CALL(AnalysisHandle, run(HasName("loop"), _, _));
+  EXPECT_CALL(PassHandle, run(HasName("loop"), _, _, _))
+      .WillOnce(WithArgs<0, 1, 2>(Invoke(getAnalysisResult)));
+
+  // PassInstrumentation calls should happen in-sequence, in the same order
+  // as passes/analyses are scheduled.
+  ::testing::Sequence PISequence;
+  EXPECT_CALL(CallbacksHandle,
+              runBeforePass(HasNameRegex("MockPassHandle"), HasName("loop")))
+      .InSequence(PISequence);
+  EXPECT_CALL(
+      CallbacksHandle,
+      runBeforeAnalysis(HasNameRegex("MockAnalysisHandle"), HasName("loop")))
+      .InSequence(PISequence);
+  EXPECT_CALL(
+      CallbacksHandle,
+      runAfterAnalysis(HasNameRegex("MockAnalysisHandle"), HasName("loop")))
+      .InSequence(PISequence);
+  EXPECT_CALL(CallbacksHandle,
+              runAfterPass(HasNameRegex("MockPassHandle"), HasName("loop")))
+      .InSequence(PISequence);
+
+  // Our mock pass does not invalidate IR.
+  EXPECT_CALL(CallbacksHandle,
+              runAfterPassInvalidated(HasNameRegex("MockPassHandle")))
+      .Times(0);
+
+  StringRef PipelineText = "test-transform";
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText, true), Succeeded())
+      << "Pipeline was: " << PipelineText;
+  PM.run(*M, AM);
+}
+
+TEST_F(LoopNestCallbacksTest, InstrumentedInvalidatingPasses) {
+  CallbacksHandle.registerPassInstrumentation();
+  // Non-mock instrumentation not specifically mentioned below can be ignored.
+  CallbacksHandle.ignoreNonMockPassInstrumentation("<string>");
+  CallbacksHandle.ignoreNonMockPassInstrumentation("foo");
+  CallbacksHandle.ignoreNonMockPassInstrumentation("loop");
+
+  EXPECT_CALL(AnalysisHandle, run(HasName("loop"), _, _));
+  EXPECT_CALL(PassHandle, run(HasName("loop"), _, _, _))
+      .WillOnce(
+          DoAll(WithArgs<0, 1, 2, 3>(Invoke(PassHandle.invalidateLoopNest)),
+                WithArgs<0, 1, 2>(Invoke(getAnalysisResult))));
+
+  // PassInstrumentation calls should happen in-sequence, in the same order
+  // as passes/analyses are scheduled.
+  ::testing::Sequence PISequence;
+  EXPECT_CALL(CallbacksHandle,
+              runBeforePass(HasNameRegex("MockPassHandle"), HasName("loop")))
+      .InSequence(PISequence);
+  EXPECT_CALL(
+      CallbacksHandle,
+      runBeforeAnalysis(HasNameRegex("MockAnalysisHandle"), HasName("loop")))
+      .InSequence(PISequence);
+  EXPECT_CALL(
+      CallbacksHandle,
+      runAfterAnalysis(HasNameRegex("MockAnalysisHandle"), HasName("loop")))
+      .InSequence(PISequence);
+  EXPECT_CALL(CallbacksHandle,
+              runAfterPassInvalidated(HasNameRegex("MockPassHandle")))
+      .InSequence(PISequence);
+  EXPECT_CALL(CallbacksHandle,
+              runAfterPassInvalidated(HasNameRegex("^PassManager")))
+      .InSequence(PISequence);
+
+  // Our mock pass invalidates IR, thus normal runAfterPass is never called.
+  EXPECT_CALL(CallbacksHandle,
+              runAfterPass(HasNameRegex("MockPassHandle"), HasName("loop")))
+      .Times(0);
+
+  StringRef PipelineText = "test-transform";
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText, true), Succeeded())
+      << "Pipeline was: " << PipelineText;
+  PM.run(*M, AM);
+}
+
+TEST_F(LoopNestCallbacksTest, InstrumentedSkippedPasses) {
+  CallbacksHandle.registerPassInstrumentation();
+  // Non-mock instrumentation run here can safely be ignored.
+  CallbacksHandle.ignoreNonMockPassInstrumentation("<string>");
+  CallbacksHandle.ignoreNonMockPassInstrumentation("foo");
+  CallbacksHandle.ignoreNonMockPassInstrumentation("loop");
+
+  // Skip the pass by returning false.
+  EXPECT_CALL(CallbacksHandle,
+              runBeforePass(HasNameRegex("MockPassHandle"), HasName("loop")))
+      .WillOnce(Return(false));
+
+  EXPECT_CALL(AnalysisHandle, run(HasName("loop"), _, _)).Times(0);
+  EXPECT_CALL(PassHandle, run(HasName("loop"), _, _, _)).Times(0);
+
+  // As the pass is skipped there is no afterPass, beforeAnalysis/afterAnalysis
+  // as well.
+  EXPECT_CALL(CallbacksHandle, runAfterPass(HasNameRegex("MockPassHandle"), _))
+      .Times(0);
+  EXPECT_CALL(CallbacksHandle,
+              runAfterPassInvalidated(HasNameRegex("MockPassHandle")))
       .Times(0);
   EXPECT_CALL(CallbacksHandle,
               runBeforeAnalysis(HasNameRegex("MockAnalysisHandle"), _))

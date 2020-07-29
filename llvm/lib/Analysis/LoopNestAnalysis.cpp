@@ -206,6 +206,15 @@ unsigned LoopNest::getMaxPerfectDepth(const Loop &Root, ScalarEvolution &SE) {
   return CurrentDepth;
 }
 
+void LoopNest::reconstructInplace(ScalarEvolution &SE) {
+  assert(!Loops.empty() && "Loop nest should contain the root loop.");
+  Loop *Root = Loops[0];
+  MaxPerfectDepth = getMaxPerfectDepth(*Root, SE);
+  Loops.clear();
+  for (Loop *L : breadth_first(Root))
+    Loops.push_back(L);
+}
+
 static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
                                 ScalarEvolution &SE) {
   // The inner loop must be the only outer loop's child.
