@@ -387,5 +387,6 @@ LOOP_NEST_PASS("print", PrintLoopNestPass())
 #ifndef LOOP_NEST_ANALYSIS
 #define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)
 #endif
+LOOP_NEST_ANALYSIS("no-op-loop-nest", NoOpLoopNestAnalysis())
 LOOP_NEST_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
 #undef LOOP_NEST_ANALYSIS

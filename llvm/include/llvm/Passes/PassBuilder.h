@@ -22,8 +22,8 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Transforms/IPO/Inliner.h"
 #include "llvm/Transforms/Instrumentation.h"
-#include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Scalar/LoopNestPassManager.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include <vector>
 
 namespace llvm {

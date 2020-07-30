@@ -842,6 +842,10 @@ TEST_F(LoopNestCallbacksTest, InstrumentedPasses) {
       .InSequence(PISequence);
   EXPECT_CALL(
       CallbacksHandle,
+      runBeforeNonSkippedPass(HasNameRegex("MockPassHandle"), HasName("loop")))
+      .InSequence(PISequence);
+  EXPECT_CALL(
+      CallbacksHandle,
       runBeforeAnalysis(HasNameRegex("MockAnalysisHandle"), HasName("loop")))
       .InSequence(PISequence);
   EXPECT_CALL(
@@ -881,6 +885,10 @@ TEST_F(LoopNestCallbacksTest, InstrumentedInvalidatingPasses) {
   ::testing::Sequence PISequence;
   EXPECT_CALL(CallbacksHandle,
               runBeforePass(HasNameRegex("MockPassHandle"), HasName("loop")))
+      .InSequence(PISequence);
+  EXPECT_CALL(
+      CallbacksHandle,
+      runBeforeNonSkippedPass(HasNameRegex("MockPassHandle"), HasName("loop")))
       .InSequence(PISequence);
   EXPECT_CALL(
       CallbacksHandle,

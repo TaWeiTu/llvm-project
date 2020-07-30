@@ -59,11 +59,11 @@ struct RequireAnalysisPass<AnalysisT, LoopNest, LoopNestAnalysisManager,
 class LNPMUpdater {
 public:
   /// This can be queried by loop nest passes which run other loop nest passes
-  /// (like pass managers) to know whether the loop needs to be skipped due
+  /// (like pass managers) to know whether the loop nest needs to be skipped due
   /// to updates to the loop nest.
   ///
-  /// If this returns true, the loop object may have been deleted, so passes
-  /// should take care not to touch the object.
+  /// If this returns true, the loop nest object may have been deleted, so
+  /// passes should take care not to touch the object.
   bool skipCurrentLoopNest() const { return SkipCurrentLoopNest; }
 
   void markLoopNestAsDeleted(LoopNest &LN, llvm::StringRef Name) {
@@ -186,7 +186,7 @@ public:
     do {
       Loop *L = Worklist.pop_back_val();
 
-      // Reset the update structure for this loop.
+      // Reset the update structure for this loop nest.
       Updater.CurrentLoopNest = L;
       Updater.SkipCurrentLoopNest = false;
 
@@ -215,8 +215,8 @@ public:
         // directly handle the loop nest analysis manager's invalidation here.
         LNAM.invalidate(LN, PassPA);
 
-      // Then intersect the preserved set so that invalidation of module
-      // analyses will eventually occur when the module pass completes.
+      // Then intersect the preserved set so that invalidation of loop nest
+      // analyses will eventually occur when the loop nest pass completes.
       PA.intersect(std::move(PassPA));
     } while (!Worklist.empty());
 
@@ -227,17 +227,8 @@ public:
     PA.preserveSet<AllAnalysesOn<LoopNest>>();
     PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
     // We also preserve the set of standard analyses.
-    PA.preserve<DominatorTreeAnalysis>();
-    PA.preserve<LoopAnalysis>();
-    PA.preserve<ScalarEvolutionAnalysis>();
-    if (UseMemorySSA)
-      PA.preserve<MemorySSAAnalysis>();
-    // FIXME: What we really want to do here is preserve an AA category, but
-    // that concept doesn't exist yet.
-    PA.preserve<AAManager>();
-    PA.preserve<BasicAA>();
-    PA.preserve<GlobalsAA>();
-    PA.preserve<SCEVAA>();
+    detail::preserveLoopStandardAnalysisResults(PA, UseMemorySSA);
+    detail::preserveAACategory(PA);
     return PA;
   }
 
@@ -281,8 +272,8 @@ public:
   explicit LoopNestToLoopPassAdaptor(LoopPassT Pass) : Pass(std::move(Pass)) {}
 
   PreservedAnalyses run(LoopNest &LN, LoopNestAnalysisManager &AM,
-                        LoopStandardAnalysisResults &LAR, LNPMUpdater &U) {
-    PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(LN, LAR);
+                        LoopStandardAnalysisResults &AR, LNPMUpdater &U) {
+    PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(LN, AR);
     PreservedAnalyses PA = PreservedAnalyses::all();
 
     // Get the loop analysis manager from the loop nest analysis manager. No
@@ -301,21 +292,34 @@ public:
       Updater.CurrentL = L;
       Updater.SkipCurrentLoop = false;
 
+#ifndef NDEBUG
+      // Save a parent loop pointer for asserts.
+      Updater.ParentL = L->getParentLoop();
+
+      // Verify the loop structure and LCSSA form.
+      L->verifyLoop();
+      assert(L->isRecursivelyLCSSAForm(AR.DT, AR.LI) &&
+             "Loops must remain in LCSSA form!");
+#endif
+
+      // Check the PassInstrumentation's BeforePass callbacks.
       if (!PI.runBeforePass<Loop>(Pass, *L))
         continue;
 
       PreservedAnalyses PassPA;
       {
         TimeTraceScope TimeScope(Pass.name());
-        PassPA = Pass.run(*L, LAM, LAR, Updater);
+        PassPA = Pass.run(*L, LAM, AR, Updater);
       }
 
+      // Do not pass deleted Loop into the instrumentation.
       if (Updater.skipCurrentLoop())
         PI.runAfterPassInvalidated<Loop>(Pass);
       else
         PI.runAfterPass<Loop>(Pass, *L);
 
       if (!Updater.SkipCurrentLoop)
+        // Invalidate the loop analysis results here.
         LAM.invalidate(*L, PassPA);
 
       PA.intersect(std::move(PassPA));
@@ -325,6 +329,8 @@ public:
     // preserved here since this will eventually be handled by the \c
     // FunctionToLoopNestPassAdaptor.
     PA.preserveSet<AllAnalysesOn<Loop>>();
+    // FIXME: We should check whether the loop nest structure is preserved or
+    // not.
     return PA;
   }
 

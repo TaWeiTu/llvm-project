@@ -16,6 +16,7 @@ class ScopPassRegistry : public ::testing::Test {
 protected:
   ModuleAnalysisManager MAM;
   FunctionAnalysisManager FAM;
+  LoopNestAnalysisManager LNAM;
   LoopAnalysisManager LAM;
   CGSCCAnalysisManager CGAM;
   ScopAnalysisManager SAM;
@@ -26,13 +27,14 @@ public:
   ScopPassRegistry(const ScopPassRegistry &) = delete;
   ScopPassRegistry &operator=(ScopPassRegistry &&) = delete;
   ScopPassRegistry &operator=(const ScopPassRegistry &) = delete;
-  ScopPassRegistry() {
+  ScopPassRegistry() : LNAM(LAM) {
     PassBuilder PB;
 
     AM = PB.buildDefaultAAPipeline();
     PB.registerModuleAnalyses(MAM);
     PB.registerFunctionAnalyses(FAM);
     PB.registerLoopAnalyses(LAM);
+    PB.registerLoopNestAnalyses(LNAM);
     PB.registerCGSCCAnalyses(CGAM);
 
     FAM.registerPass([] { return ScopAnalysis(); });
@@ -43,7 +45,7 @@ public:
     // SAM.registerPass([] { return DependenceAnalysis(); });
     SAM.registerPass([this] { return FunctionAnalysisManagerScopProxy(FAM); });
 
-    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+    PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, MAM);
   }
 };
 

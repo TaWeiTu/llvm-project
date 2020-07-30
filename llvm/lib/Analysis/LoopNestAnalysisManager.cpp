@@ -36,16 +36,16 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
   const std::vector<Loop *> &Loops = LI->getTopLevelLoops();
 
   auto PAC = PA.getChecker<LoopNestAnalysisManagerFunctionProxy>();
-  bool invalidateMemorySSAAnalysis = false;
+  bool InvalidateMemorySSAAnalysis = false;
   if (MSSAUsed)
-    invalidateMemorySSAAnalysis = Inv.invalidate<MemorySSAAnalysis>(F, PA);
+    InvalidateMemorySSAAnalysis = Inv.invalidate<MemorySSAAnalysis>(F, PA);
   if (!PAC.preserved() && !PAC.preservedSet<AllAnalysesOn<Function>>()) {
     if (Inv.invalidate<AAManager>(F, PA) ||
         Inv.invalidate<AssumptionAnalysis>(F, PA) ||
         Inv.invalidate<DominatorTreeAnalysis>(F, PA) ||
         Inv.invalidate<LoopAnalysis>(F, PA) ||
         Inv.invalidate<ScalarEvolutionAnalysis>(F, PA) ||
-        invalidateMemorySSAAnalysis) {
+        InvalidateMemorySSAAnalysis) {
       // Note that the LoopInfo may be stale at this point, however the loop
       // objects themselves remain the only viable keys that could be in the
       // analysis manager's cache. So we just walk the keys and forcibly clear

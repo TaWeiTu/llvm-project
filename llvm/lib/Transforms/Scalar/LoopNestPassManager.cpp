@@ -59,7 +59,7 @@ PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
     // FIXME: This is quite inefficient. Consider reimplementing LoopNest to
     // allow dynamic modifications by the loop nest passes to avoid
     // reconstructing it every time.
-    bool isLoopNestPreserved =
+    bool IsLoopNestPreserved =
         PassPA.getChecker<LoopNestAnalysis>().preserved();
 
     // No need to invalidate other loop nest analyses since they are running on
@@ -68,7 +68,7 @@ PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
     if (!U.skipCurrentLoopNest())
       AM.invalidate(LN, PassPA);
 
-    if (!isLoopNestPreserved)
+    if (!IsLoopNestPreserved)
       // The LoopNest structure had been altered, reconstruct it here.
       LN.reconstructInplace(AR.SE);
     PA.intersect(std::move(PassPA));

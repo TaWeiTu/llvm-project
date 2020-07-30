@@ -223,6 +223,30 @@ private:
       : Worklist(Worklist), LAM(LAM) {}
 };
 
+namespace detail {
+
+/// Helper function for preserving the standard analyses on loops.
+inline void preserveLoopStandardAnalysisResults(PreservedAnalyses &PA,
+                                                bool UseMemorySSA) {
+  PA.preserve<DominatorTreeAnalysis>();
+  PA.preserve<LoopAnalysis>();
+  PA.preserve<ScalarEvolutionAnalysis>();
+  if (UseMemorySSA)
+    PA.preserve<MemorySSAAnalysis>();
+}
+
+/// Helper function for preserving AA category.
+inline void preserveAACategory(PreservedAnalyses &PA) {
+  // FIXME: What we really want to do here is preserve an AA category, but
+  // that concept doesn't exist yet.
+  PA.preserve<AAManager>();
+  PA.preserve<BasicAA>();
+  PA.preserve<GlobalsAA>();
+  PA.preserve<SCEVAA>();
+}
+
+} // namespace detail
+
 /// Adaptor that maps from a function to its loops.
 ///
 /// Designed to allow composition of a LoopPass(Manager) and a
@@ -381,17 +405,8 @@ public:
     PA.preserveSet<AllAnalysesOn<Loop>>();
     PA.preserve<LoopAnalysisManagerFunctionProxy>();
     // We also preserve the set of standard analyses.
-    PA.preserve<DominatorTreeAnalysis>();
-    PA.preserve<LoopAnalysis>();
-    PA.preserve<ScalarEvolutionAnalysis>();
-    if (UseMemorySSA)
-      PA.preserve<MemorySSAAnalysis>();
-    // FIXME: What we really want to do here is preserve an AA category, but
-    // that concept doesn't exist yet.
-    PA.preserve<AAManager>();
-    PA.preserve<BasicAA>();
-    PA.preserve<GlobalsAA>();
-    PA.preserve<SCEVAA>();
+    detail::preserveLoopStandardAnalysisResults(PA, UseMemorySSA);
+    detail::preserveAACategory(PA);
     return PA;
   }
 

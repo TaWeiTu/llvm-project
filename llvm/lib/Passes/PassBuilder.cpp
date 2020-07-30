@@ -410,8 +410,7 @@ class NoOpLoopNestAnalysis : public AnalysisInfoMixin<NoOpLoopNestAnalysis> {
 
 public:
   struct Result {};
-  Result run(LoopNest &, LoopNestAnalysisManager &,
-             LoopStandardAnalysisResults &) {
+  Result run(Loop &, LoopAnalysisManager &, LoopStandardAnalysisResults &) {
     return Result();
   }
   static StringRef name() { return "NoOpLoopNestAnalysis"; }
@@ -420,6 +419,7 @@ public:
 AnalysisKey NoOpModuleAnalysis::Key;
 AnalysisKey NoOpCGSCCAnalysis::Key;
 AnalysisKey NoOpFunctionAnalysis::Key;
+AnalysisKey NoOpLoopNestAnalysis::Key;
 AnalysisKey NoOpLoopAnalysis::Key;
 
 } // namespace
@@ -2564,7 +2564,7 @@ Error PassBuilder::parseLoopNestPass(LoopNestPassManager &LNPM,
                                      const PipelineElement &E,
                                      bool VerifyEachPass, bool DebugLogging) {
   StringRef Name = E.Name;
-  auto &InnerPipeline = E.InnerPipeline;
+  const auto &InnerPipeline = E.InnerPipeline;
 
   // First handle complex passes like the pass managers which carry pipelines.
   if (!InnerPipeline.empty()) {

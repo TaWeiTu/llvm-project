@@ -107,7 +107,7 @@ public:
 
   template <typename PassBuilderT>
   bool registerPass(PassBuilderT &&PassBuilder) {
-    return InternalLAM.registerPass(PassBuilder);
+    return InternalLAM.registerPass(std::forward<PassBuilderT>(PassBuilder));
   }
 
   void invalidate(LoopNest &LN, const PreservedAnalyses &PA) {
