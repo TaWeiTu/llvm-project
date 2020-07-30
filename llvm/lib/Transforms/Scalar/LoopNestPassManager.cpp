@@ -50,6 +50,11 @@ PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
     else
       PI.runAfterPass<LoopNest>(*Pass, LN);
 
+    if (U.skipCurrentLoopNest()) {
+      PA.intersect(std::move(PassPA));
+      break;
+    }
+
     // We shouldn't allow invalidating LoopNestAnalysis in AM since otherwise
     // LN will be dangling. Currently the loop nest passes cannot explicitly
     // update the LoopNest structure, so we must first check whether
@@ -65,8 +70,7 @@ PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
     // No need to invalidate other loop nest analyses since they are running on
     // Loop and hence can be updated dynamically.
     PassPA.preserve<LoopNestAnalysis>();
-    if (!U.skipCurrentLoopNest())
-      AM.invalidate(LN, PassPA);
+    AM.invalidate(LN, PassPA);
 
     if (!IsLoopNestPreserved)
       // The LoopNest structure had been altered, reconstruct it here.
@@ -79,7 +83,6 @@ PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
   // nest. Therefore, the remaining analysis results in the AnalysisManager are
   // preserved. We mark this with a set so that we don't need to inspect each
   // one individually.
-  assert(PA.getChecker<LoopNestAnalysis>().preserved());
   PA.preserveSet<AllAnalysesOn<LoopNest>>();
 
   if (DebugLogging)

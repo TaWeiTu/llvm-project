@@ -287,6 +287,12 @@ public:
 
     assert(!Worklist.empty() &&
            "Worklist should be non-empty since we're running on a LoopNest");
+
+    // Save a copy of the root loop and its name here in case they are
+    // invalidated later.
+    const Loop *Root = &LN.getOutermostLoop();
+    const std::string LoopNestName = std::string(LN.getName());
+
     do {
       Loop *L = Worklist.pop_back_val();
       Updater.CurrentL = L;
@@ -324,6 +330,14 @@ public:
 
       PA.intersect(std::move(PassPA));
     } while (!Worklist.empty());
+
+    // Since the loops are processed in post-order, at this point CurrentL in
+    // Updater should points to the root loop. If the root loop is marked as
+    // deleted, we should also delete the loop nest from the function.
+    assert(Updater.CurrentL == Root && "CurrentL should point to the root loop "
+                                       "after traversing the loop nest.");
+    if (Updater.skipCurrentLoop())
+      U.markLoopNestAsDeleted(LN, LoopNestName);
 
     // We don't have to explicitly mark the loop standard analysis results as
     // preserved here since this will eventually be handled by the \c
