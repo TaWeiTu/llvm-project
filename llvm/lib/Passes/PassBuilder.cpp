@@ -2467,10 +2467,16 @@ Error PassBuilder::parseFunctionPass(FunctionPassManager &FPM,
     }
     if (Name == "loop-nest" || Name == "loop-nest-mssa") {
       LoopNestPassManager LNPM(DebugLogging);
-      if (auto Err = parseLoopNestPassPipeline(LNPM, InnerPipeline,
-                                               VerifyEachPass, DebugLogging))
-        return Err;
+      // Because the LoopStandardAnalysisResults can only be constructed at
+      // FunctionToLoopNestPassAdaptor but not at LoopNestToLoopPassAdaptor,
+      // UseMemorySSA should depends on the loop passes as well.
+      // Memory SSA is needed true if either the loop nest explicitly requires
+      // it or at least one of the loop passes wrapped inside the loop nest pass
+      // requires it.
       bool UseMemorySSA = (Name == "loop-nest-mssa");
+      if (auto Err = parseLoopNestPassPipeline(
+              LNPM, InnerPipeline, UseMemorySSA, VerifyEachPass, DebugLogging))
+        return Err;
       FPM.addPass(createFunctionToLoopNestPassAdaptor(
           std::move(LNPM), UseMemorySSA, DebugLogging));
       return Error::success();
@@ -2562,7 +2568,8 @@ Error PassBuilder::parseFunctionPass(FunctionPassManager &FPM,
 
 Error PassBuilder::parseLoopNestPass(LoopNestPassManager &LNPM,
                                      const PipelineElement &E,
-                                     bool VerifyEachPass, bool DebugLogging) {
+                                     bool &UseMemorySSA, bool VerifyEachPass,
+                                     bool DebugLogging) {
   StringRef Name = E.Name;
   const auto &InnerPipeline = E.InnerPipeline;
 
@@ -2570,8 +2577,9 @@ Error PassBuilder::parseLoopNestPass(LoopNestPassManager &LNPM,
   if (!InnerPipeline.empty()) {
     if (Name == "loop-nest") {
       LoopNestPassManager NestedLNPM(DebugLogging);
-      if (auto Err = parseLoopNestPassPipeline(NestedLNPM, InnerPipeline,
-                                               VerifyEachPass, DebugLogging))
+      if (auto Err =
+              parseLoopNestPassPipeline(NestedLNPM, InnerPipeline, UseMemorySSA,
+                                        VerifyEachPass, DebugLogging))
         return Err;
       // Add the nested pass manager with the appropriate adaptor.
       LNPM.addPass(std::move(NestedLNPM));
@@ -2584,14 +2592,16 @@ Error PassBuilder::parseLoopNestPass(LoopNestPassManager &LNPM,
       if (auto Err = parseLoopPassPipeline(LPM, InnerPipeline, VerifyEachPass,
                                            DebugLogging))
         return Err;
-      // bool UseMemorySSA = (Name == "loop-mssa");
+      // If the loop pass requires MemorySSA, the loop nest pass does as well.
+      UseMemorySSA |= (Name == "loop-mssa");
       LNPM.addPass(createLoopNestToLoopPassAdaptor(std::move(LPM)));
       return Error::success();
     }
     if (auto Count = parseRepeatPassName(Name)) {
       LoopNestPassManager NestedLNPM(DebugLogging);
-      if (auto Err = parseLoopNestPassPipeline(NestedLNPM, InnerPipeline,
-                                               VerifyEachPass, DebugLogging))
+      if (auto Err =
+              parseLoopNestPassPipeline(NestedLNPM, InnerPipeline, UseMemorySSA,
+                                        VerifyEachPass, DebugLogging))
         return Err;
       LNPM.addPass(createRepeatedPass(*Count, std::move(NestedLNPM)));
       return Error::success();
@@ -2738,11 +2748,12 @@ bool PassBuilder::parseAAPassName(AAManager &AA, StringRef Name) {
 
 Error PassBuilder::parseLoopNestPassPipeline(LoopNestPassManager &LNPM,
                                              ArrayRef<PipelineElement> Pipeline,
+                                             bool &UseMemorySSA,
                                              bool VerifyEachPass,
                                              bool DebugLogging) {
   for (const auto &Element : Pipeline) {
-    if (auto Err =
-            parseLoopNestPass(LNPM, Element, VerifyEachPass, DebugLogging))
+    if (auto Err = parseLoopNestPass(LNPM, Element, UseMemorySSA,
+                                     VerifyEachPass, DebugLogging))
       return Err;
     // FIXME: No verifier support for LoopNest passes!
   }

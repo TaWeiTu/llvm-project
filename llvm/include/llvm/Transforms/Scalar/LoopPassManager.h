@@ -245,6 +245,24 @@ inline void preserveAACategory(PreservedAnalyses &PA) {
   PA.preserve<SCEVAA>();
 }
 
+/// Helper function for getting the analysis results needed by loop and loop
+/// nest passes.
+inline LoopStandardAnalysisResults
+getLoopStandardAnalysisResults(Function &F, FunctionAnalysisManager &AM,
+                               bool UseMemorySSA) {
+  MemorySSA *MSSA =
+      UseMemorySSA ? (&AM.getResult<MemorySSAAnalysis>(F).getMSSA()) : nullptr;
+  LoopStandardAnalysisResults LAR = {AM.getResult<AAManager>(F),
+                                     AM.getResult<AssumptionAnalysis>(F),
+                                     AM.getResult<DominatorTreeAnalysis>(F),
+                                     AM.getResult<LoopAnalysis>(F),
+                                     AM.getResult<ScalarEvolutionAnalysis>(F),
+                                     AM.getResult<TargetLibraryAnalysis>(F),
+                                     AM.getResult<TargetIRAnalysis>(F),
+                                     MSSA};
+  return LAR;
+}
+
 } // namespace detail
 
 /// Adaptor that maps from a function to its loops.
@@ -289,18 +307,9 @@ public:
     if (LI.empty())
       return PA;
 
-    // Get the analysis results needed by loop passes.
-    MemorySSA *MSSA = UseMemorySSA
-                          ? (&AM.getResult<MemorySSAAnalysis>(F).getMSSA())
-                          : nullptr;
-    LoopStandardAnalysisResults LAR = {AM.getResult<AAManager>(F),
-                                       AM.getResult<AssumptionAnalysis>(F),
-                                       AM.getResult<DominatorTreeAnalysis>(F),
-                                       AM.getResult<LoopAnalysis>(F),
-                                       AM.getResult<ScalarEvolutionAnalysis>(F),
-                                       AM.getResult<TargetLibraryAnalysis>(F),
-                                       AM.getResult<TargetIRAnalysis>(F),
-                                       MSSA};
+    // Get the analysis results needed by loop nest passes.
+    LoopStandardAnalysisResults LAR =
+        detail::getLoopStandardAnalysisResults(F, AM, UseMemorySSA);
 
     // Setup the loop analysis manager from its proxy. It is important that
     // this is only done when there are loops to process and we have built the

@@ -151,17 +151,8 @@ public:
       return PA;
 
     // Get the analysis results needed by loop nest passes.
-    MemorySSA *MSSA = UseMemorySSA
-                          ? (&AM.getResult<MemorySSAAnalysis>(F).getMSSA())
-                          : nullptr;
-    LoopStandardAnalysisResults LAR = {AM.getResult<AAManager>(F),
-                                       AM.getResult<AssumptionAnalysis>(F),
-                                       AM.getResult<DominatorTreeAnalysis>(F),
-                                       AM.getResult<LoopAnalysis>(F),
-                                       AM.getResult<ScalarEvolutionAnalysis>(F),
-                                       AM.getResult<TargetLibraryAnalysis>(F),
-                                       AM.getResult<TargetIRAnalysis>(F),
-                                       MSSA};
+    LoopStandardAnalysisResults LAR =
+        detail::getLoopStandardAnalysisResults(F, AM, UseMemorySSA);
 
     // Setup the loop nest analysis manager from its proxy. It is important that
     // this is only done when there are loops to process and we have built the

@@ -130,6 +130,8 @@ public:
   }
 
   StringRef getName() const {
+    // FIXME: Choose a better name for loop nests so that they are
+    // distinguishable from the loops' names.
     Loop &Root = getOutermostLoop();
     return Root.getName();
   }

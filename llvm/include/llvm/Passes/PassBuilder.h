@@ -738,7 +738,8 @@ private:
   Error parseLoopPass(LoopPassManager &LPM, const PipelineElement &E,
                       bool VerifyEachPass, bool DebugLogging);
   Error parseLoopNestPass(LoopNestPassManager &LNPM, const PipelineElement &E,
-                          bool VerifyEachPass, bool DebugLogging);
+                          bool &UseMemorySSA, bool VerifyEachPass,
+                          bool DebugLogging);
   bool parseAAPassName(AAManager &AA, StringRef Name);
 
   Error parseLoopPassPipeline(LoopPassManager &LPM,
@@ -746,7 +747,8 @@ private:
                               bool VerifyEachPass, bool DebugLogging);
   Error parseLoopNestPassPipeline(LoopNestPassManager &LNPM,
                                   ArrayRef<PipelineElement> Pipeline,
-                                  bool VerifyEachPass, bool DebugLogging);
+                                  bool &UseMemorySSA, bool VerifyEachPass,
+                                  bool DebugLogging);
   Error parseFunctionPassPipeline(FunctionPassManager &FPM,
                                   ArrayRef<PipelineElement> Pipeline,
                                   bool VerifyEachPass, bool DebugLogging);
