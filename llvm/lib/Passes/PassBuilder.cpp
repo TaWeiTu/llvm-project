@@ -2580,8 +2580,6 @@ Error PassBuilder::parseLoopNestPass(LoopNestPassManager &LNPM,
     // Loop passes can be wrapped in a loop nest pass via \c
     // LoopNestToLoopPassAdaptor.
     if (Name == "loop" || Name == "loop-mssa") {
-      dbgs() << "wrapping loop passes in loop nest pass"
-             << "\n";
       LoopPassManager LPM(DebugLogging);
       if (auto Err = parseLoopPassPipeline(LPM, InnerPipeline, VerifyEachPass,
                                            DebugLogging))
@@ -2627,13 +2625,13 @@ Error PassBuilder::parseLoopNestPass(LoopNestPassManager &LNPM,
   if (Name == "require<" NAME ">") {                                           \
     LNPM.addPass(RequireAnalysisPass<                                          \
                  std::remove_reference<decltype(CREATE_PASS)>::type, LoopNest, \
-                 LoopNestAnalysisManager, LoopStandardAnalysisResult &,        \
+                 LoopNestAnalysisManager, LoopStandardAnalysisResults &,       \
                  LNPMUpdater &>());                                            \
     return Error::success();                                                   \
   }                                                                            \
   if (Name == "invalidate<" NAME ">") {                                        \
-    LNPM.addPass(InvalidateAnalysisPass <                                      \
-                 std::remove_reference<decltype(CREATE_PASS)>::type());        \
+    LNPM.addPass(InvalidateAnalysisPass<                                       \
+                 std::remove_reference<decltype(CREATE_PASS)>::type>());       \
     return Error::success();                                                   \
   }
 #include "PassRegistry.def"
@@ -2800,6 +2798,7 @@ void PassBuilder::crossRegisterProxies(LoopAnalysisManager &LAM,
   FAM.registerPass([&] { return CGSCCAnalysisManagerFunctionProxy(CGAM); });
   FAM.registerPass([&] { return ModuleAnalysisManagerFunctionProxy(MAM); });
   FAM.registerPass([&] { return LoopNestAnalysisManagerFunctionProxy(LNAM); });
+  LNAM.registerPass([&] { return FunctionAnalysisManagerLoopNestProxy(FAM); });
   FAM.registerPass([&] { return LoopAnalysisManagerFunctionProxy(LAM); });
   LAM.registerPass([&] { return FunctionAnalysisManagerLoopProxy(FAM); });
 }

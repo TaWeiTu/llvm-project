@@ -23,7 +23,7 @@ namespace llvm {
 template class AnalysisManager<LoopNest>;
 template class InnerAnalysisManagerProxy<LoopNestAnalysisManager, Function>;
 template class InnerAnalysisManagerProxy<LoopAnalysisManager, LoopNest>;
-template class OuterAnalysisManagerProxy<FunctionAnalysisManager, LoopNest,
+template class OuterAnalysisManagerProxy<FunctionAnalysisManager, Loop,
                                          LoopStandardAnalysisResults &>;
 
 bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(

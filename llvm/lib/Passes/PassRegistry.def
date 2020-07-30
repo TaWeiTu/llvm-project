@@ -370,6 +370,8 @@ LOOP_PASS_WITH_PARAMS("unswitch",
 #ifndef LOOP_NEST_ANALYSIS
 #define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)
 #endif
+LOOP_NEST_ANALYSIS("no-op-loop-nest", NoOpLoopNestAnalysis())
+LOOP_NEST_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
 #undef LOOP_NEST_ANALYSIS
 
 #ifndef LOOP_NEST_PASS
@@ -383,10 +385,3 @@ LOOP_NEST_PASS("print", PrintLoopNestPass())
 #define LOOP_NEST_PASS_WITH_PARAMS(NAME, CREATE_PASS)
 #endif
 #undef LOOP_NEST_PASS_WITH_PARAMS
-
-#ifndef LOOP_NEST_ANALYSIS
-#define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)
-#endif
-LOOP_NEST_ANALYSIS("no-op-loop-nest", NoOpLoopNestAnalysis())
-LOOP_NEST_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
-#undef LOOP_NEST_ANALYSIS

@@ -199,10 +199,10 @@ LoopNestAnalysisManagerFunctionProxy::run(Function &F,
 extern template class InnerAnalysisManagerProxy<LoopNestAnalysisManager,
                                                 Function>;
 
-extern template class OuterAnalysisManagerProxy<
-    FunctionAnalysisManager, LoopNest, LoopStandardAnalysisResults &>;
+extern template class OuterAnalysisManagerProxy<FunctionAnalysisManager, Loop,
+                                                LoopStandardAnalysisResults &>;
 using FunctionAnalysisManagerLoopNestProxy =
-    OuterAnalysisManagerProxy<FunctionAnalysisManager, LoopNest,
+    OuterAnalysisManagerProxy<FunctionAnalysisManager, Loop,
                               LoopStandardAnalysisResults &>;
 
 } // namespace llvm
