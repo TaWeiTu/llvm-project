@@ -51,11 +51,9 @@
 ; LN-NEXT: Starting Loop pass manager run.
 ; LN-NEXT: Running pass: LoopRotatePass on Loop at depth 1 containing: %bb<header><exiting>,%bb4<latch>
 ; LN-NEXT: Folding loop latch bb4 into bb
-; LN-NEXT: Invalidating all non-preserved analyses for: bb
 ; LN-NEXT: Invalidating analysis: LoopNestAnalysis on bb
 ; LN-NEXT: Finished Loop pass manager run.
 ; LN-NEXT: Finished LoopNest pass manager run.
-; LN-NEXT: Invalidating all non-preserved analyses for: f
 ; LN-NEXT: Invalidating analysis: PostDominatorTreeAnalysis on f
 ; LN-NEXT: Running pass: ADCEPass on f
 ; LN-NEXT: Running analysis: PostDominatorTreeAnalysis on f
@@ -107,11 +105,9 @@
 ; LNMSSA-NEXT: Starting Loop pass manager run.
 ; LNMSSA-NEXT: Running pass: LoopRotatePass on Loop at depth 1 containing: %bb<header><exiting>,%bb4<latch>
 ; LNMSSA-NEXT: Folding loop latch bb4 into bb
-; LNMSSA-NEXT: Invalidating all non-preserved analyses for: bb
 ; LNMSSA-NEXT: Invalidating analysis: LoopNestAnalysis on bb
 ; LNMSSA-NEXT: Finished Loop pass manager run.
 ; LNMSSA-NEXT: Finished LoopNest pass manager run.
-; LNMSSA-NEXT: Invalidating all non-preserved analyses for: f
 ; LNMSSA-NEXT: Invalidating analysis: PostDominatorTreeAnalysis on f
 ; LNMSSA-NEXT: Running pass: ADCEPass on f
 ; LNMSSA-NEXT: Running analysis: PostDominatorTreeAnalysis on f
