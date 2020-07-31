@@ -2556,6 +2556,21 @@ Error PassBuilder::parseFunctionPass(FunctionPassManager &FPM,
                                                 false, DebugLogging));         \
     return Error::success();                                                   \
   }
+#define LOOP_NEST_PASS(NAME, CREATE_PASS)                                      \
+  if (Name == NAME) {                                                          \
+    FPM.addPass(createFunctionToLoopNestPassAdaptor(CREATE_PASS, false,        \
+                                                    DebugLogging));            \
+    return Error::success();                                                   \
+  }
+#define LOOP_NEST_PASS_WITH_PARAMS(NAME, CREATE_PASS, PARSER)                  \
+  if (checkParametrizedPassName(Name, NAME)) {                                 \
+    auto Params = parsePassParameters(PARSER, Name, NAME);                     \
+    if (!Params)                                                               \
+      return Params.takeError();                                               \
+    FPM.addPass(createFunctionToLoopNestPassAdaptor(CREATE_PASS(Params.get()), \
+                                                    false, DebugLogging));     \
+    return Error::success();                                                   \
+  }
 #include "PassRegistry.def"
 
   for (auto &C : FunctionPipelineParsingCallbacks)
@@ -2920,6 +2935,29 @@ Error PassBuilder::parsePassPipeline(FunctionPassManager &FPM,
 
   if (auto Err = parseFunctionPassPipeline(FPM, *Pipeline, VerifyEachPass,
                                            DebugLogging))
+    return Err;
+  return Error::success();
+}
+
+Error PassBuilder::parsePassPipeline(LoopNestPassManager &LNPM,
+                                     StringRef PipelineText, bool &UseMemorySSA,
+                                     bool VerifyEachPass, bool DebugLogging) {
+  auto Pipeline = parsePipelineText(PipelineText);
+  if (!Pipeline || Pipeline->empty())
+    return make_error<StringError>(
+        formatv("invalid pipeline '{0}'", PipelineText).str(),
+        inconvertibleErrorCode());
+
+  StringRef FirstName = Pipeline->front().Name;
+  if (!isLoopNestPassName(FirstName, LoopNestPipelineParsingCallbacks))
+    return make_error<StringError>(
+        formatv("unknown loop nest pass '{0}' in pipeline '{1}'", FirstName,
+                PipelineText)
+            .str(),
+        inconvertibleErrorCode());
+
+  if (auto Err = parseLoopNestPassPipeline(LNPM, *Pipeline, UseMemorySSA,
+                                           VerifyEachPass, DebugLogging))
     return Err;
   return Error::success();
 }

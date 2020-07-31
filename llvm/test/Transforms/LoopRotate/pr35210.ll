@@ -34,7 +34,6 @@
 ; LN: Starting llvm::Function pass manager run.
 ; LN-NEXT: Running pass: ADCEPass on f
 ; LN-NEXT: Running analysis: PostDominatorTreeAnalysis on f
-; LN-NEXT: Running pass: FunctionToLoopNestPassAdaptor{{.*}} on f
 ; LN-NEXT: Starting llvm::Function pass manager run.
 ; LN-NEXT: Running pass: LoopSimplifyPass on f
 ; LN-NEXT: Running analysis: LoopAnalysis on f
@@ -47,10 +46,8 @@
 ; LN-NEXT: Running analysis: ScalarEvolutionAnalysis on f
 ; LN-NEXT: Running analysis: TargetIRAnalysis on f
 ; LN-NEXT: Running analysis: InnerAnalysisManagerProxy{{.*}} on f
-; LN-NEXT: Running analysis: LoopNestAnalysis on bb
-; LN-NEXT: Running analysis: PassInstrumentationAnalysis on bb
+; LN-NEXT: Running analysis: LoopNestAnalysis on Loop at depth 1 containing: %bb<header><exiting>,%bb4<latch>
 ; LN-NEXT: Starting LoopNest pass manager run.
-; LN-NEXT: Running pass: LoopNestToLoopPassAdaptor{{.*}} on bb
 ; LN-NEXT: Starting Loop pass manager run.
 ; LN-NEXT: Running pass: LoopRotatePass on Loop at depth 1 containing: %bb<header><exiting>,%bb4<latch>
 ; LN-NEXT: Folding loop latch bb4 into bb
@@ -92,7 +89,6 @@
 ; LNMSSA: Starting llvm::Function pass manager run.
 ; LNMSSA-NEXT: Running pass: ADCEPass on f
 ; LNMSSA-NEXT: Running analysis: PostDominatorTreeAnalysis on f
-; LNMSSA-NEXT: Running pass: FunctionToLoopNestPassAdaptor{{.*}} on f
 ; LNMSSA-NEXT: Starting llvm::Function pass manager run.
 ; LNMSSA-NEXT: Running pass: LoopSimplifyPass on f
 ; LNMSSA-NEXT: Running analysis: LoopAnalysis on f
@@ -106,10 +102,8 @@
 ; LNMSSA-NEXT: Running analysis: ScalarEvolutionAnalysis on f
 ; LNMSSA-NEXT: Running analysis: TargetIRAnalysis on f
 ; LNMSSA-NEXT: Running analysis: InnerAnalysisManagerProxy{{.*}} on f
-; LNMSSA-NEXT: Running analysis: LoopNestAnalysis on bb
-; LNMSSA-NEXT: Running analysis: PassInstrumentationAnalysis on bb
+; LNMSSA-NEXT: Running analysis: LoopNestAnalysis on Loop at depth 1 containing: %bb<header><exiting>,%bb4<latch>
 ; LNMSSA-NEXT: Starting LoopNest pass manager run.
-; LNMSSA-NEXT: Running pass: LoopNestToLoopPassAdaptor{{.*}} on bb
 ; LNMSSA-NEXT: Starting Loop pass manager run.
 ; LNMSSA-NEXT: Running pass: LoopRotatePass on Loop at depth 1 containing: %bb<header><exiting>,%bb4<latch>
 ; LNMSSA-NEXT: Folding loop latch bb4 into bb

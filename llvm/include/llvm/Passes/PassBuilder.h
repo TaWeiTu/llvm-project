@@ -517,8 +517,8 @@ public:
   Error parsePassPipeline(LoopPassManager &LPM, StringRef PipelineText,
                           bool VerifyEachPass = true,
                           bool DebugLogging = false);
-  Error parsePassPipeline(LoopNestPassManager &LPM, StringRef PipelineText,
-                          bool VerifyEachPass = true,
+  Error parsePassPipeline(LoopNestPassManager &LNPM, StringRef PipelineText,
+                          bool &UseMemorySSA, bool VerifyEachPass = true,
                           bool DebugLogging = false);
   /// @}}
 
