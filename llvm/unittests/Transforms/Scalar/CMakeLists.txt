@@ -11,6 +11,7 @@ set(LLVM_LINK_COMPONENTS
 add_llvm_unittest(ScalarTests
   LICMTest.cpp
   LoopPassManagerTest.cpp
+  LoopNestPassManagerTest.cpp
   )
 
 target_link_libraries(ScalarTests PRIVATE LLVMTestingSupport)
