@@ -484,4 +484,44 @@ TEST_F(LoopNestPassManagerTest, Basic) {
   MPM.run(*M, MAM);
 }
 
+TEST_F(LoopNestPassManagerTest, DeleteTopLevelLoops) {
+  ModulePassManager MPM(true);
+  ::testing::InSequence MakeExpectationsSequence;
+
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _));
+  // We mark the top-level loop as deleted in the loop pass, so the loop nest
+  // pass manager should skip the loop nest.
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(WithArgs<0, 3>(Invoke([&](Loop &L, LPMUpdater &U) {
+        U.markLoopAsDeleted(L, L.getName());
+        return PreservedAnalyses::all();
+      })));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _)).Times(0);
+
+  EXPECT_CALL(MLPHandle, run(HasName("loop.g.0"), _, _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.g.0"), _, _, _));
+  // The inner loop is mark as deleted, but it does not affect whether the loop
+  // nest pass should be run.
+  EXPECT_CALL(MLPHandle, run(HasName("loop.g.1.0"), _, _, _))
+      .WillOnce(WithArgs<0, 3>(Invoke([&](Loop &L, LPMUpdater &U) {
+        U.markLoopAsDeleted(L, L.getName());
+        return PreservedAnalyses::all();
+      })));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.g.1"), _, _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.g.1"), _, _, _));
+
+  LoopPassManager LPM(true);
+  LPM.addPass(MLPHandle.getPass());
+  LoopNestPassManager LNPM(true);
+  LNPM.addPass(createLoopNestToLoopPassAdaptor(std::move(LPM)));
+  LNPM.addPass(MLNPHandle.getPass());
+  FunctionPassManager FPM(true);
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(std::move(LNPM)));
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+
+  MPM.run(*M, MAM);
+}
+
 } // namespace
