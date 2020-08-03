@@ -50,6 +50,11 @@ struct RequireAnalysisPass<AnalysisT, LoopNest, LoopNestAnalysisManager,
   }
 };
 
+template <typename AnalysisT>
+using RequireAnalysisLoopNestPass =
+    RequireAnalysisPass<AnalysisT, LoopNest, LoopNestAnalysisManager,
+                        LoopStandardAnalysisResults &, LNPMUpdater &>;
+
 /// This class provides an interface for updating the loop nest pass manager
 /// based on mutations to the loop nest.
 ///

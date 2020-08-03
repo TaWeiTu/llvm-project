@@ -65,7 +65,9 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
   bool AreLoopNestAnalysesPreserved =
       PA.allAnalysesInSetPreserved<AllAnalysesOn<LoopNest>>();
 
-  for (Loop *L : Loops) {
+  // getTopLevelLoops() returns loops in "reversed" order. Reverse the list
+  // again for correctness.
+  for (Loop *L : reverse(Loops)) {
     Optional<PreservedAnalyses> LoopNestPA;
 
     // Check to see whether the preserved set needs to be pruned based on
@@ -102,6 +104,28 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
 
   // Return false to indicate that this result is still a valid proxy.
   return false;
+}
+
+void LoopNestAnalysisManager::invalidateSubLoopAnalyses(
+    Loop &Root, const PreservedAnalyses &PA) {
+  // We can return immediately if all the loop analyses are preserved.
+  if (PA.areAllPreserved() ||
+      PA.allAnalysesInSetPreserved<AllAnalysesOn<Loop>>())
+    return;
+
+  // Collect the loops in the subtree in post-order by performing DFS without
+  // recursion using a stack.
+  SmallVector<Loop *, 4> Stack(Root.begin(), Root.end()), SubLoops;
+  while (!Stack.empty()) {
+    Loop *L = Stack.pop_back_val();
+    SubLoops.push_back(L);
+    Stack.append(L->begin(), L->end());
+  }
+
+  // Visit the loops in reversed post-order and invalidate them.
+  for (Loop *L : reverse(SubLoops)) {
+    InternalLAM.invalidate(*L, PA);
+  }
 }
 
 template <>

@@ -80,6 +80,8 @@ PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
   // preserved. We mark this with a set so that we don't need to inspect each
   // one individually.
   PA.preserveSet<AllAnalysesOn<LoopNest>>();
+  // All analyses on Loops are preserved as well.
+  PA.preserveSet<AllAnalysesOn<Loop>>();
 
   if (DebugLogging)
     dbgs() << "Finished LoopNest pass manager run.\n";

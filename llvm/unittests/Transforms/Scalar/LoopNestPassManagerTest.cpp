@@ -292,22 +292,22 @@ public:
             Context,
             "define void @f(i1* %ptr) {\n"
             "entry:\n"
-            "  br label %loop.0\n"
-            "loop.0:\n"
+            "  br label %loop.f.0\n"
+            "loop.f.0:\n"
             "  %cond.0 = load volatile i1, i1* %ptr\n"
-            "  br i1 %cond.0, label %loop.0.0.ph, label %end\n"
-            "loop.0.0.ph:\n"
-            "  br label %loop.0.0\n"
-            "loop.0.0:\n"
+            "  br i1 %cond.0, label %loop.f.0.0.ph, label %end\n"
+            "loop.f.0.0.ph:\n"
+            "  br label %loop.f.0.0\n"
+            "loop.f.0.0:\n"
             "  %cond.0.0 = load volatile i1, i1* %ptr\n"
-            "  br i1 %cond.0.0, label %loop.0.0, label %loop.0.1.ph\n"
-            "loop.0.1.ph:\n"
-            "  br label %loop.0.1\n"
-            "loop.0.1:\n"
+            "  br i1 %cond.0.0, label %loop.f.0.0, label %loop.f.0.1.ph\n"
+            "loop.f.0.1.ph:\n"
+            "  br label %loop.f.0.1\n"
+            "loop.f.0.1:\n"
             "  %cond.0.1 = load volatile i1, i1* %ptr\n"
-            "  br i1 %cond.0.1, label %loop.0.1, label %loop.0.latch\n"
-            "loop.0.latch:\n"
-            "  br label %loop.0\n"
+            "  br i1 %cond.0.1, label %loop.f.0.1, label %loop.f.0.latch\n"
+            "loop.f.0.latch:\n"
+            "  br label %loop.f.0\n"
             "end:\n"
             "  ret void\n"
             "}\n"
@@ -377,18 +377,18 @@ TEST_F(LoopNestPassManagerTest, Basic) {
   // the subloops are visited by the loop passes and loop analyses. By
   // definition, the top-level loops will be visited by both kinds of passes and
   // analyses.
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _))
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.f.0"), _, _, _))
       .WillOnce(Invoke(getLoopNestAnalysisResult));
-  EXPECT_CALL(MLNAHandle, run(HasName("loop.0"), _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _))
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0.0"), _, _, _))
       .WillOnce(Invoke(getLoopAnalysisResult));
-  EXPECT_CALL(MLAHandle, run(HasName("loop.0.0"), _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _))
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0.1"), _, _, _))
       .WillOnce(Invoke(getLoopAnalysisResult));
-  EXPECT_CALL(MLAHandle, run(HasName("loop.0.1"), _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0"), _, _, _))
       .WillOnce(Invoke(getLoopAnalysisResult));
-  EXPECT_CALL(MLAHandle, run(HasName("loop.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
 
   EXPECT_CALL(MLNPHandle, run(HasName("loop.g.0"), _, _, _))
       .WillOnce(Invoke(getLoopNestAnalysisResult));
@@ -420,13 +420,13 @@ TEST_F(LoopNestPassManagerTest, Basic) {
 
   // Next we reverse the order of loop pass and loop nest pass. The analyses are
   // perserved and hence never run.
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _))
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0.0"), _, _, _))
       .WillOnce(Invoke(getLoopAnalysisResult));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _))
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0.1"), _, _, _))
       .WillOnce(Invoke(getLoopAnalysisResult));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0"), _, _, _))
       .WillOnce(Invoke(getLoopAnalysisResult));
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _))
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.f.0"), _, _, _))
       .WillOnce(Invoke(getLoopNestAnalysisResult));
 
   EXPECT_CALL(MLPHandle, run(HasName("loop.g.0"), _, _, _))
@@ -452,10 +452,10 @@ TEST_F(LoopNestPassManagerTest, Basic) {
     MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   }
 
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _))
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.f.0"), _, _, _))
       .WillOnce(Return(PreservedAnalyses::none()))
       .WillOnce(Invoke(getLoopNestAnalysisResult));
-  EXPECT_CALL(MLNAHandle, run(HasName("loop.0"), _, _));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
 
   EXPECT_CALL(MLNPHandle, run(HasName("loop.g.0"), _, _, _))
       .WillOnce(DoDefault())
@@ -474,10 +474,10 @@ TEST_F(LoopNestPassManagerTest, Basic) {
   }
 
   // Inner loops should not be visited by loop nest passes and analyses at all.
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.0.0"), _, _, _)).Times(0);
-  EXPECT_CALL(MLNAHandle, run(HasName("loop.0.0"), _, _)).Times(0);
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.0.1"), _, _, _)).Times(0);
-  EXPECT_CALL(MLNAHandle, run(HasName("loop.0.1"), _, _)).Times(0);
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.f.0.0"), _, _, _)).Times(0);
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0.0"), _, _)).Times(0);
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.f.0.1"), _, _, _)).Times(0);
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0.1"), _, _)).Times(0);
   EXPECT_CALL(MLNPHandle, run(HasName("loop.g.1.0"), _, _, _)).Times(0);
   EXPECT_CALL(MLNAHandle, run(HasName("loop.g.1.0"), _, _)).Times(0);
 
@@ -485,20 +485,19 @@ TEST_F(LoopNestPassManagerTest, Basic) {
 }
 
 TEST_F(LoopNestPassManagerTest, DeleteTopLevelLoops) {
-  ModulePassManager MPM(true);
-  ::testing::InSequence MakeExpectationsSequence;
+  ::testing::InSequence MakeExpectationsSequenced;
 
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0.0"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0.1"), _, _, _));
   // We mark the top-level loop as deleted in the loop pass, so the loop nest
   // pass manager should skip the loop nest.
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
+  EXPECT_CALL(MLPHandle, run(HasName("loop.f.0"), _, _, _))
       .WillOnce(WithArgs<0, 3>(Invoke([&](Loop &L, LPMUpdater &U) {
         U.markLoopAsDeleted(L, L.getName());
         return PreservedAnalyses::all();
       })));
 
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _)).Times(0);
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.f.0"), _, _, _)).Times(0);
 
   EXPECT_CALL(MLPHandle, run(HasName("loop.g.0"), _, _, _));
   EXPECT_CALL(MLNPHandle, run(HasName("loop.g.0"), _, _, _));
@@ -512,6 +511,7 @@ TEST_F(LoopNestPassManagerTest, DeleteTopLevelLoops) {
   EXPECT_CALL(MLPHandle, run(HasName("loop.g.1"), _, _, _));
   EXPECT_CALL(MLNPHandle, run(HasName("loop.g.1"), _, _, _));
 
+  ModulePassManager MPM(true);
   LoopPassManager LPM(true);
   LPM.addPass(MLPHandle.getPass());
   LoopNestPassManager LNPM(true);
@@ -521,6 +521,119 @@ TEST_F(LoopNestPassManagerTest, DeleteTopLevelLoops) {
   FPM.addPass(createFunctionToLoopNestPassAdaptor(std::move(LNPM)));
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
 
+  MPM.run(*M, MAM);
+}
+
+TEST_F(LoopNestPassManagerTest, FunctionPassInvalidationOfLoopNestAnalyses) {
+  ::testing::Sequence FSequence, GSequence;
+
+  // First, force the analysis result to be computed for each loop nest.
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _)).InSequence(FSequence);
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.g.0"), _, _)).InSequence(GSequence);
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.g.1"), _, _)).InSequence(GSequence);
+
+  FunctionPassManager FPM(true);
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+
+  // No need to re-run if we require again from a fresh loop nest pass manager.
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+
+  // All analyses are invalidated (the proxy in particular). In this case the
+  // LoopAnalysisManager (LoopNestAnalysisManager) will be cleared, so the
+  // invalidation will not happen.
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _))
+      .InSequence(FSequence)
+      .WillOnce(Return(PreservedAnalyses::none()));
+
+  // Only the MockLoopNestAnalysisHandle::Analysis is invalidated.
+  PreservedAnalyses PA = getLoopPassPreservedAnalyses();
+  if (EnableMSSALoopDependency)
+    PA.preserve<MemorySSAAnalysis>();
+
+  EXPECT_CALL(MFPHandle, run(HasName("g"), _))
+      .InSequence(GSequence)
+      .WillOnce(Return(PA));
+  // The analysis result is not invalidated on loop.g.0, so no need to re-run.
+  EXPECT_CALL(MLNAHandle, invalidate(HasName("loop.g.0"), _, _))
+      .InSequence(GSequence)
+      .WillOnce(Return(false));
+  EXPECT_CALL(MLNAHandle, invalidate(HasName("loop.g.1"), _, _))
+      .InSequence(GSequence);
+
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _)).InSequence(FSequence);
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.g.1"), _, _)).InSequence(GSequence);
+
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+
+  ModulePassManager MPM(true);
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+
+  MPM.run(*M, MAM);
+}
+
+TEST_F(LoopNestPassManagerTest, LoopNestPassInvalidationOfLoopAnalyses) {
+  ::testing::Sequence FSequence, G0Sequence, G1Sequence;
+
+  // First, force the analysis result to be computed for each loop.
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _))
+      .InSequence(FSequence);
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _))
+      .InSequence(FSequence);
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _)).InSequence(FSequence);
+
+  EXPECT_CALL(MLAHandle, run(HasName("loop.g.0"), _, _)).InSequence(G0Sequence);
+  EXPECT_CALL(MLAHandle, run(HasName("loop.g.1.0"), _, _))
+      .InSequence(G1Sequence);
+  EXPECT_CALL(MLAHandle, run(HasName("loop.g.1"), _, _)).InSequence(G1Sequence);
+
+  LoopNestPassManager LNPM(true);
+  LNPM.addPass(createLoopNestToLoopPassAdaptor(
+      RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>()));
+
+  // No need to re-run if we require again from a fresh loop pass manager.
+  LNPM.addPass(createLoopNestToLoopPassAdaptor(
+      RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>()));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.f.0"), _, _, _))
+      .InSequence(FSequence)
+      .WillOnce(Return(PreservedAnalyses::none()));
+  EXPECT_CALL(MLAHandle, invalidate(HasName("loop.f.0.0"), _, _))
+      .InSequence(FSequence);
+  EXPECT_CALL(MLAHandle, invalidate(HasName("loop.f.0.1"), _, _))
+      .InSequence(FSequence)
+      .WillOnce(Return(false));
+  EXPECT_CALL(MLAHandle, invalidate(HasName("loop.f.0"), _, _))
+      .InSequence(FSequence);
+
+  // Only the MockLoopAnalysisHandle::Analysis is invalidated.
+  PreservedAnalyses PA = getLoopPassPreservedAnalyses();
+  if (EnableMSSALoopDependency)
+    PA.preserve<MemorySSAAnalysis>();
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.g.0"), _, _, _))
+      .InSequence(G0Sequence)
+      .WillOnce(Return(PA));
+  EXPECT_CALL(MLAHandle, invalidate(HasName("loop.g.0"), _, _))
+      .InSequence(G0Sequence);
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.g.1"), _, _, _))
+      .InSequence(G1Sequence);
+  LNPM.addPass(MLNPHandle.getPass());
+
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _))
+      .InSequence(FSequence);
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _)).InSequence(FSequence);
+  EXPECT_CALL(MLAHandle, run(HasName("loop.g.0"), _, _)).InSequence(G0Sequence);
+
+  LNPM.addPass(createLoopNestToLoopPassAdaptor(
+      RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>()));
+
+  ModulePassManager MPM(true);
+  MPM.addPass(createModuleToFunctionPassAdaptor(
+      createFunctionToLoopNestPassAdaptor(std::move(LNPM))));
   MPM.run(*M, MAM);
 }
 

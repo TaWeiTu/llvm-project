@@ -110,10 +110,15 @@ public:
     return InternalLAM.registerPass(std::forward<PassBuilderT>(PassBuilder));
   }
 
+  /// Invalidate the analysis results. Aside from the loop nest analyses of the
+  /// root loop, we have to invalidate the loop analyses of all the subtree as
+  /// well.
   void invalidate(LoopNest &LN, const PreservedAnalyses &PA) {
+    invalidateSubLoopAnalyses(LN.getOutermostLoop(), PA);
     InternalLAM.invalidate(LN.getOutermostLoop(), PA);
   }
   void invalidate(Loop &L, const PreservedAnalyses &PA) {
+    invalidateSubLoopAnalyses(L, PA);
     InternalLAM.invalidate(L, PA);
   }
 
@@ -123,11 +128,14 @@ private:
   LoopAnalysisManager &InternalLAM;
   friend class InnerAnalysisManagerProxy<
       AnalysisManager<LoopNest, LoopStandardAnalysisResults &>, Function>;
+
+  /// Invalidate the loop analyses of loops in the subtree rooted at \p L
+  /// (excluding \p L).
+  void invalidateSubLoopAnalyses(Loop &L, const PreservedAnalyses &PA);
 };
 
 using LoopNestAnalysisManager =
     AnalysisManager<LoopNest, LoopStandardAnalysisResults &>;
-
 using LoopNestAnalysisManagerFunctionProxy =
     InnerAnalysisManagerProxy<LoopNestAnalysisManager, Function>;
 
@@ -198,7 +206,6 @@ LoopNestAnalysisManagerFunctionProxy::run(Function &F,
 
 extern template class InnerAnalysisManagerProxy<LoopNestAnalysisManager,
                                                 Function>;
-
 extern template class OuterAnalysisManagerProxy<FunctionAnalysisManager, Loop,
                                                 LoopStandardAnalysisResults &>;
 using FunctionAnalysisManagerLoopNestProxy =
