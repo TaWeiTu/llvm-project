@@ -223,6 +223,8 @@ private:
       : Worklist(Worklist), LAM(LAM) {}
 };
 
+// Collections of helper functions that are used by both loop pass manager and
+// loop nest pass manager.
 namespace detail {
 
 /// Helper function for preserving the standard analyses on loops.
@@ -263,6 +265,15 @@ getLoopStandardAnalysisResults(Function &F, FunctionAnalysisManager &AM,
   return LAR;
 }
 
+/// Helper function for constructing loop canonicalization passes for loop pass
+/// manager and loop nest pass manager.
+inline FunctionPassManager getLoopCanonicalizationPasses(bool DebugLogging) {
+  FunctionPassManager FPM(DebugLogging);
+  FPM.addPass(LoopSimplifyPass());
+  FPM.addPass(LCSSAPass());
+  return FPM;
+}
+
 } // namespace detail
 
 /// Adaptor that maps from a function to its loops.
@@ -278,11 +289,10 @@ class FunctionToLoopPassAdaptor
 public:
   explicit FunctionToLoopPassAdaptor(LoopPassT Pass, bool UseMemorySSA = false,
                                      bool DebugLogging = false)
-      : Pass(std::move(Pass)), LoopCanonicalizationFPM(DebugLogging),
-        UseMemorySSA(UseMemorySSA) {
-    LoopCanonicalizationFPM.addPass(LoopSimplifyPass());
-    LoopCanonicalizationFPM.addPass(LCSSAPass());
-  }
+      : Pass(std::move(Pass)),
+        LoopCanonicalizationFPM(
+            detail::getLoopCanonicalizationPasses(DebugLogging)),
+        UseMemorySSA(UseMemorySSA) {}
 
   /// Runs the loop passes across every loop in the function.
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {

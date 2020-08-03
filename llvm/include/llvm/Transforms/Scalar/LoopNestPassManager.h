@@ -34,9 +34,9 @@ using LoopNestPassManager =
     PassManager<LoopNest, LoopNestAnalysisManager,
                 LoopStandardAnalysisResults &, LNPMUpdater &>;
 
-/// A partial specialization of the require analysis template pass to forward
-/// the extra parameters from a transformation's run method to the
-/// AnalysisManager's getResult.
+/// A partial specialization of the require analysis template pass for loop
+/// nests to forward the extra parameters from a transformation's run method to
+/// the AnalysisManager's getResult.
 template <typename AnalysisT>
 struct RequireAnalysisPass<AnalysisT, LoopNest, LoopNestAnalysisManager,
                            LoopStandardAnalysisResults &, LNPMUpdater &>
@@ -125,25 +125,23 @@ public:
                                          bool UseMemorySSA = false,
                                          bool DebugLogging = false)
       : Pass(std::move(Pass)), UseMemorySSA(UseMemorySSA),
-        LoopCanonicalizationFPM(DebugLogging) {
-    LoopCanonicalizationFPM.addPass(LoopSimplifyPass());
-    LoopCanonicalizationFPM.addPass(LCSSAPass());
-  }
+        LoopCanonicalizationFPM(
+            detail::getLoopCanonicalizationPasses(DebugLogging)) {}
 
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
+    PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(F);
+
+    PreservedAnalyses PA = PreservedAnalyses::all();
     // Before we even compute any loop nest analyses, first run a miniature
     // function pass pipeline to put loops into their canonical form. Note that
     // we can directly build up function analyses after this as the function
     // pass manager handles all the invalidation at that layer.
-    PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(F);
-
-    PreservedAnalyses PA = PreservedAnalyses::all();
     if (PI.runBeforePass<Function>(LoopCanonicalizationFPM, F)) {
       PA = LoopCanonicalizationFPM.run(F, AM);
       PI.runAfterPass<Function>(LoopCanonicalizationFPM, F);
     }
 
-    // Get the loop structure for this function
+    // Get the loop structure for this function.
     LoopInfo &LI = AM.getResult<LoopAnalysis>(F);
 
     // If there are no loops, there is nothing to do here.
@@ -181,6 +179,7 @@ public:
       Updater.CurrentLoopNest = L;
       Updater.SkipCurrentLoopNest = false;
 
+      // Construct the actual LoopNest object from the analysis manager.
       LoopNest &LN = LNAM.getLoopNest(*L, LAR);
       // Check the PassInstrumentation's BeforePass callbacks before running the
       // pass, skip its execution completely if asked to (callback returns
@@ -299,7 +298,8 @@ public:
              "Loops must remain in LCSSA form!");
 #endif
 
-      // Check the PassInstrumentation's BeforePass callbacks.
+      // Check the PassInstrumentation's BeforePass callbacks before running the
+      // loop pass.
       if (!PI.runBeforePass<Loop>(Pass, *L))
         continue;
 
@@ -334,8 +334,6 @@ public:
     // preserved here since this will eventually be handled by the \c
     // FunctionToLoopNestPassAdaptor.
     PA.preserveSet<AllAnalysesOn<Loop>>();
-    // FIXME: We should check whether the loop nest structure is preserved or
-    // not.
     return PA;
   }
 
@@ -344,7 +342,7 @@ private:
 };
 
 /// A function to deduce a loop pass type and wrap it in the templated
-/// adaptor.
+/// adaptor that converts it to a loop nest pass.
 template <typename LoopPassT>
 LoopNestToLoopPassAdaptor<LoopPassT>
 createLoopNestToLoopPassAdaptor(LoopPassT Pass) {
