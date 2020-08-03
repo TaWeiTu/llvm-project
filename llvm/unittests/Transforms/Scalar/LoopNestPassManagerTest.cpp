@@ -558,6 +558,7 @@ TEST_F(LoopNestPassManagerTest, FunctionPassInvalidationOfLoopNestAnalyses) {
 
   // Only the MockLoopNestAnalysisHandle::Analysis is invalidated.
   PreservedAnalyses PA = getLoopPassPreservedAnalyses();
+  PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
   if (EnableMSSALoopDependency)
     PA.preserve<MemorySSAAnalysis>();
 
@@ -672,6 +673,7 @@ TEST_F(LoopNestPassManagerTest, ModulePassInvalidationOfLoopNestAnalyses) {
   EXPECT_CALL(MMPHandle, run(_, _)).WillOnce(InvokeWithoutArgs([] {
     auto PA = getLoopPassPreservedAnalyses();
     PA.preserve<FunctionAnalysisManagerModuleProxy>();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
     if (EnableMSSALoopDependency)
       PA.preserve<MemorySSAAnalysis>();
     return PA;
@@ -710,6 +712,241 @@ TEST_F(LoopNestPassManagerTest, ModulePassInvalidationOfLoopNestAnalyses) {
           RequireAnalysisLoopNestPass<
               MockLoopNestAnalysisHandle::Analysis>())));
 
+  MPM.run(*M, MAM);
+}
+
+// Test that if any of the bundled analyses provided in the LNPM's signature
+// become invalid, the analysis proxy itself becomes invalid and we clear all
+// loop nest analysis and loop analysis results.
+TEST_F(LoopNestPassManagerTest, InvalidationOfBoundedAnalyses) {
+  ModulePassManager MPM(true);
+  FunctionPassManager FPM(true);
+  ::testing::InSequence MakeExpectationsSequenced;
+
+  // First, force the analysis result to be computed for each loop nest.
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  // No need to re-run if we require again from a fresh loop nest pass manager.
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  // Preserving everything but the loop analyses themselves results in
+  // invalidation and running.
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    PreservedAnalyses PA = getLoopPassPreservedAnalyses();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
+    return PA;
+  }));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    PreservedAnalyses PA = getLoopPassPreservedAnalyses();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
+    PA.preserve<MockLoopNestAnalysisHandle::Analysis>();
+    return PA;
+  }));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    PreservedAnalyses PA = getLoopPassPreservedAnalyses();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
+    PA.preserve<MockLoopAnalysisHandle::Analysis>();
+    return PA;
+  }));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  // The rest don't invalidate analyses, they only trigger re-runs because we
+  // clear the cache completely.
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    auto PA = PreservedAnalyses::none();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
+    // Abandon `AAManager`.
+    PA.abandon<AAManager>();
+    PA.preserve<AssumptionAnalysis>();
+    PA.preserve<DominatorTreeAnalysis>();
+    PA.preserve<LoopAnalysis>();
+    PA.preserve<LoopAnalysisManagerFunctionProxy>();
+    PA.preserve<ScalarEvolutionAnalysis>();
+    PA.preserve<MockLoopAnalysisHandle::Analysis>();
+    PA.preserve<MockLoopNestAnalysisHandle::Analysis>();
+    return PA;
+  }));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    auto PA = PreservedAnalyses::none();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
+    PA.preserve<AAManager>();
+    // Not preserving `AssumptionAnalysis`.
+    PA.preserve<DominatorTreeAnalysis>();
+    PA.preserve<LoopAnalysis>();
+    PA.preserve<LoopAnalysisManagerFunctionProxy>();
+    PA.preserve<ScalarEvolutionAnalysis>();
+    PA.preserve<ScalarEvolutionAnalysis>();
+    PA.preserve<MockLoopAnalysisHandle::Analysis>();
+    PA.preserve<MockLoopNestAnalysisHandle::Analysis>();
+    return PA;
+  }));
+  // Special case: AssumptionAnalysis will never be invalidated.
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    auto PA = PreservedAnalyses::none();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
+    PA.preserve<AAManager>();
+    PA.preserve<AssumptionAnalysis>();
+    // Abandon `DominatorTreeAnalysis`.
+    PA.abandon<DominatorTreeAnalysis>();
+    PA.preserve<LoopAnalysis>();
+    PA.preserve<LoopAnalysisManagerFunctionProxy>();
+    PA.preserve<ScalarEvolutionAnalysis>();
+    PA.preserve<MockLoopAnalysisHandle::Analysis>();
+    PA.preserve<MockLoopNestAnalysisHandle::Analysis>();
+    return PA;
+  }));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    auto PA = PreservedAnalyses::none();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
+    PA.preserve<AAManager>();
+    PA.preserve<AssumptionAnalysis>();
+    PA.preserve<DominatorTreeAnalysis>();
+    // Abandon the `LoopAnalysis`.
+    PA.abandon<LoopAnalysis>();
+    PA.preserve<LoopAnalysisManagerFunctionProxy>();
+    PA.preserve<ScalarEvolutionAnalysis>();
+    PA.preserve<MockLoopAnalysisHandle::Analysis>();
+    PA.preserve<MockLoopNestAnalysisHandle::Analysis>();
+    return PA;
+  }));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    auto PA = PreservedAnalyses::none();
+    PA.preserve<AAManager>();
+    PA.preserve<AssumptionAnalysis>();
+    PA.preserve<DominatorTreeAnalysis>();
+    PA.preserve<LoopAnalysis>();
+    // Abandon the `LoopNestAnalysisManagerFunctionProxy`.
+    PA.abandon<LoopAnalysisManagerFunctionProxy>();
+    PA.preserve<ScalarEvolutionAnalysis>();
+    PA.preserve<MockLoopAnalysisHandle::Analysis>();
+    PA.preserve<MockLoopNestAnalysisHandle::Analysis>();
+    return PA;
+  }));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  EXPECT_CALL(MFPHandle, run(HasName("f"), _)).WillOnce(InvokeWithoutArgs([] {
+    auto PA = PreservedAnalyses::none();
+    PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
+    PA.preserve<AAManager>();
+    PA.preserve<AssumptionAnalysis>();
+    PA.preserve<DominatorTreeAnalysis>();
+    PA.preserve<LoopAnalysis>();
+    PA.preserve<LoopAnalysisManagerFunctionProxy>();
+    // Abandon `ScalarEvolutionAnalysis`.
+    PA.abandon<ScalarEvolutionAnalysis>();
+    PA.preserve<MockLoopAnalysisHandle::Analysis>();
+    PA.preserve<MockLoopNestAnalysisHandle::Analysis>();
+    return PA;
+  }));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.f.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.f.0"), _, _));
+  FPM.addPass(MFPHandle.getPass());
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      RequireAnalysisLoopNestPass<MockLoopNestAnalysisHandle::Analysis>()));
+  FPM.addPass(
+      createFunctionToLoopNestPassAdaptor(createLoopNestToLoopPassAdaptor(
+          RequireAnalysisLoopPass<MockLoopAnalysisHandle::Analysis>())));
+
+  // The loop analyses and loop nest analyses will be run only on the first
+  // time. The results are cached in the remaining passes.
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.g.0"), _, _));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.g.1"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.g.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.g.1.0"), _, _));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.g.1"), _, _));
+  EXPECT_CALL(MFPHandle, run(HasName("g"), _)).Times(9);
+
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
   MPM.run(*M, MAM);
 }
 

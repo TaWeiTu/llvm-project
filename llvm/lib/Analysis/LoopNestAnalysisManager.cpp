@@ -33,32 +33,37 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
   if (PA.areAllPreserved())
     return false; // This is still a valid proxy.
 
-  const std::vector<Loop *> &Loops = LI->getTopLevelLoops();
+  std::vector<Loop *> TopLevelLoops = LI->getTopLevelLoops();
+  SmallVector<Loop *, 4> PreOrderLoops = LI->getLoopsInReverseSiblingPreorder();
 
   auto PAC = PA.getChecker<LoopNestAnalysisManagerFunctionProxy>();
   bool InvalidateMemorySSAAnalysis = false;
   if (MSSAUsed)
     InvalidateMemorySSAAnalysis = Inv.invalidate<MemorySSAAnalysis>(F, PA);
-  if (!PAC.preserved() && !PAC.preservedSet<AllAnalysesOn<Function>>()) {
-    if (Inv.invalidate<AAManager>(F, PA) ||
-        Inv.invalidate<AssumptionAnalysis>(F, PA) ||
-        Inv.invalidate<DominatorTreeAnalysis>(F, PA) ||
-        Inv.invalidate<LoopAnalysis>(F, PA) ||
-        Inv.invalidate<ScalarEvolutionAnalysis>(F, PA) ||
-        InvalidateMemorySSAAnalysis) {
-      // Note that the LoopInfo may be stale at this point, however the loop
-      // objects themselves remain the only viable keys that could be in the
-      // analysis manager's cache. So we just walk the keys and forcibly clear
-      // those results. Note that the order doesn't matter here as this will
-      // just directly destroy the results without calling methods on them.
-      //
-      // Though we're dealing with loop nests here, the analysis results can
-      // still be cleared via the root loops.
-      for (Loop *L : Loops)
-        InnerAM->clear(*L, "<possibly invalidated loop>");
-      InnerAM = nullptr;
-      return true;
-    }
+  if (!(PAC.preserved() || PAC.preservedSet<AllAnalysesOn<Function>>()) ||
+      Inv.invalidate<AAManager>(F, PA) ||
+      Inv.invalidate<AssumptionAnalysis>(F, PA) ||
+      Inv.invalidate<DominatorTreeAnalysis>(F, PA) ||
+      Inv.invalidate<LoopAnalysis>(F, PA) ||
+      Inv.invalidate<ScalarEvolutionAnalysis>(F, PA) ||
+      InvalidateMemorySSAAnalysis) {
+    // Note that the LoopInfo may be stale at this point, however the loop
+    // objects themselves remain the only viable keys that could be in the
+    // analysis manager's cache. So we just walk the keys and forcibly clear
+    // those results. Note that the order doesn't matter here as this will
+    // just directly destroy the results without calling methods on them.
+    //
+    // Though we're dealing with loop nests here, the analysis results can
+    // still be cleared via the root loops.
+    //
+    // Note that not only do we invalidate loop nest analyses on the root
+    // loops, the loop anlayses on the subloops should also be cleared because
+    // they depend on the standard analysis results as well.
+    dbgs() << "OK" << "\n";
+    for (Loop *L : PreOrderLoops)
+      InnerAM->clear(*L, "<possibly invalidated loop>");
+    InnerAM = nullptr;
+    return true;
   }
 
   // Directly check if the relevant set is preserved.
@@ -67,7 +72,7 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
 
   // getTopLevelLoops() returns loops in "reversed" order. Reverse the list
   // again for correctness.
-  for (Loop *L : reverse(Loops)) {
+  for (Loop *L : reverse(TopLevelLoops)) {
     Optional<PreservedAnalyses> LoopNestPA;
 
     // Check to see whether the preserved set needs to be pruned based on
