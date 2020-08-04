@@ -51,7 +51,6 @@
 ; LN-NEXT: Starting Loop pass manager run.
 ; LN-NEXT: Running pass: LoopRotatePass on Loop at depth 1 containing: %bb<header><exiting>,%bb4<latch>
 ; LN-NEXT: Folding loop latch bb4 into bb
-; LN-NEXT: Invalidating analysis: LoopNestAnalysis on bb
 ; LN-NEXT: Finished Loop pass manager run.
 ; LN-NEXT: Finished LoopNest pass manager run.
 ; LN-NEXT: Invalidating analysis: PostDominatorTreeAnalysis on f
@@ -105,7 +104,6 @@
 ; LNMSSA-NEXT: Starting Loop pass manager run.
 ; LNMSSA-NEXT: Running pass: LoopRotatePass on Loop at depth 1 containing: %bb<header><exiting>,%bb4<latch>
 ; LNMSSA-NEXT: Folding loop latch bb4 into bb
-; LNMSSA-NEXT: Invalidating analysis: LoopNestAnalysis on bb
 ; LNMSSA-NEXT: Finished Loop pass manager run.
 ; LNMSSA-NEXT: Finished LoopNest pass manager run.
 ; LNMSSA-NEXT: Invalidating analysis: PostDominatorTreeAnalysis on f
