@@ -12,6 +12,7 @@
 
 #include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/IR/PassManager.h"
+#include <type_traits>
 
 namespace llvm {
 
@@ -28,9 +29,12 @@ class LNPMUpdater;
 /// \c LoopNestAnalysisManager is a wrapper around \c LoopAnalysisManager and
 /// provide all the public APIs that \c AnalysisManager has so that is seems to
 /// be operating on \c LoopNest. \c LoopNestAnalysisManager also provides the
-/// ability to construct \c LoopNest from the top-level \c Loop. The loop nest
-/// analyses can also obtain the \c LoopNest object from the \c
-/// LoopAnalysisManager.
+/// ability to construct \c LoopNest from the top-level \c Loop.
+///
+/// However, the result of \c LoopNestAnaysis (\c LoopNest) is maintained in a
+/// separate loop analysis manager. This prevents the loop passes from
+/// accidently invalidating the \c LoopNest object to which the top-level loop
+/// nest pass manager still holds reference.
 ///
 /// The \c LoopNest object will be invalidated after the loop nest passes unless
 /// \c LoopNestAnalysis is explicitly marked as preserved.
@@ -54,18 +58,22 @@ public:
     }
   };
 
-  AnalysisManager(LoopAnalysisManager &LAM) : InternalLAM(LAM) {}
+  AnalysisManager(LoopAnalysisManager &LAM, bool DebugLogging = false)
+      : InternalLAM(LAM), LoopNestManager(DebugLogging) {}
 
-  bool empty() const { return InternalLAM.empty(); };
+  bool empty() const { return InternalLAM.empty() && LoopNestManager.empty(); };
 
   void clear(LoopNest &LN, llvm::StringRef Name) {
     InternalLAM.clear(LN.getOutermostLoop(), Name);
+    LoopNestManager.clear(LN.getOutermostLoop(), Name);
   }
-  void clear(Loop &L, llvm::StringRef Name) { InternalLAM.clear(L, Name); }
-  void clear() { InternalLAM.clear(); }
-
-  LoopNest &getLoopNest(Loop &Root, LoopStandardAnalysisResults &LAR) {
-    return InternalLAM.getResult<LoopNestAnalysis>(Root, LAR);
+  void clear(Loop &L, llvm::StringRef Name) {
+    InternalLAM.clear(L, Name);
+    LoopNestManager.clear(L, Name);
+  }
+  void clear() {
+    InternalLAM.clear();
+    LoopNestManager.clear();
   }
 
   /// Get the result of an analysis pass for a given LoopNest.
@@ -95,37 +103,73 @@ public:
     return InternalLAM.getCachedResult<PassT>(L);
   }
 
+  template <>
+  LoopNest &getResult<LoopNestAnalysis>(LoopNest &LN,
+                                        LoopStandardAnalysisResults &LAR) {
+    return LoopNestManager.getResult<LoopNestAnalysis>(LN.getOutermostLoop(),
+                                                       LAR);
+  }
+  template <>
+  LoopNest &getResult<LoopNestAnalysis>(Loop &L,
+                                        LoopStandardAnalysisResults &LAR) {
+    return LoopNestManager.getResult<LoopNestAnalysis>(L, LAR);
+  }
+  template <> LoopNest *getCachedResult<LoopNestAnalysis>(LoopNest &LN) const {
+    return LoopNestManager.getCachedResult<LoopNestAnalysis>(
+        LN.getOutermostLoop());
+  }
+  template <> LoopNest *getCachedResult<LoopNestAnalysis>(Loop &L) const {
+    return LoopNestManager.getCachedResult<LoopNestAnalysis>(L);
+  }
+
   template <typename PassT>
   void verifyNotInvalidated(LoopNest &LN,
                             typename PassT::Result *Result) const {
     InternalLAM.verifyNotInvalidated<PassT>(LN.getOutermostLoop(), Result);
   }
-  template <typename PassT>
-  void verifyNotInvalidated(Loop &L, typename PassT::Result *Result) const {
-    InternalLAM.verifyNotInvalidated<PassT>(L, Result);
-  }
 
   template <typename PassBuilderT>
-  bool registerPass(PassBuilderT &&PassBuilder) {
+  auto registerPass(PassBuilderT &&PassBuilder) -> typename std::enable_if<
+      !std::is_same<LoopNestAnalysis, decltype(PassBuilder())>::value &&
+          !std::is_same<PassInstrumentationAnalysis,
+                        decltype(PassBuilder())>::value,
+      bool>::type {
     return InternalLAM.registerPass(std::forward<PassBuilderT>(PassBuilder));
+  }
+
+  /// Registration of LoopNestAnalysis should be forwarded to the loop nest
+  /// manager instead. The SFINAE expression is to ensure that PassBuilder() is
+  /// of type LoopNestAnalysis.
+  template <typename PassBuilderT>
+  auto registerPass(PassBuilderT &&PassBuilder) -> typename std::enable_if<
+      std::is_same<LoopNestAnalysis, decltype(PassBuilder())>::value ||
+          std::is_same<PassInstrumentationAnalysis,
+                       decltype(PassBuilder())>::value,
+      bool>::type {
+    return LoopNestManager.registerPass(
+        std::forward<PassBuilderT>(PassBuilder));
   }
 
   /// Invalidate the analysis results. Aside from the loop nest analyses of the
   /// root loop, we have to invalidate the loop analyses of all the subtree as
   /// well.
   void invalidate(LoopNest &LN, const PreservedAnalyses &PA) {
-    invalidateSubLoopAnalyses(LN.getOutermostLoop(), PA);
-    InternalLAM.invalidate(LN.getOutermostLoop(), PA);
+    Loop &L = LN.getOutermostLoop();
+    invalidateSubLoopAnalyses(L, PA);
+    InternalLAM.invalidate(L, PA);
+    LoopNestManager.invalidate(L, PA);
   }
   void invalidate(Loop &L, const PreservedAnalyses &PA) {
     invalidateSubLoopAnalyses(L, PA);
     InternalLAM.invalidate(L, PA);
+    LoopNestManager.invalidate(L, PA);
   }
 
   LoopAnalysisManager &getLoopAnalysisManager() { return InternalLAM; }
 
 private:
   LoopAnalysisManager &InternalLAM;
+  LoopAnalysisManager LoopNestManager;
   friend class InnerAnalysisManagerProxy<
       AnalysisManager<LoopNest, LoopStandardAnalysisResults &>, Function>;
 

@@ -361,7 +361,7 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
   }
 
   LoopAnalysisManager LAM(DebugPM);
-  LoopNestAnalysisManager LNAM(LAM);
+  LoopNestAnalysisManager LNAM(LAM, DebugPM);
   FunctionAnalysisManager FAM(DebugPM);
   CGSCCAnalysisManager CGAM(DebugPM);
   ModuleAnalysisManager MAM(DebugPM);

@@ -342,7 +342,7 @@ public:
             "end:\n"
             "  ret void\n"
             "}\n")),
-        LAM(true), LNAM(LAM), FAM(true), MAM(true) {
+        LAM(true), LNAM(LAM, true), FAM(true), MAM(true) {
     // Register mock analysis.
     LNAM.registerPass([&] { return MLNAHandle.getAnalysis(); });
     LAM.registerPass([&] { return MLAHandle.getAnalysis(); });

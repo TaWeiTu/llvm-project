@@ -185,7 +185,7 @@ public:
       Updater.SkipCurrentLoopNest = false;
 
       // Construct the actual LoopNest object from the analysis manager.
-      LoopNest &LN = LNAM.getLoopNest(*L, LAR);
+      LoopNest &LN = LNAM.getResult<LoopNestAnalysis>(*L, LAR);
       // Check the PassInstrumentation's BeforePass callbacks before running the
       // pass, skip its execution completely if asked to (callback returns
       // false).

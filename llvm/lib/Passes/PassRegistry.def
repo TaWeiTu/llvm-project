@@ -327,7 +327,6 @@ LOOP_ANALYSIS("no-op-loop", NoOpLoopAnalysis())
 LOOP_ANALYSIS("access-info", LoopAccessAnalysis())
 LOOP_ANALYSIS("ddg", DDGAnalysis())
 LOOP_ANALYSIS("iv-users", IVUsersAnalysis())
-LOOP_ANALYSIS("loop-nest", LoopNestAnalysis())
 LOOP_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
 #undef LOOP_ANALYSIS
 
@@ -370,6 +369,7 @@ LOOP_PASS_WITH_PARAMS("unswitch",
 #ifndef LOOP_NEST_ANALYSIS
 #define LOOP_NEST_ANALYSIS(NAME, CREATE_PASS)
 #endif
+LOOP_NEST_ANALYSIS("loop-nest", LoopNestAnalysis())
 LOOP_NEST_ANALYSIS("no-op-loop-nest", NoOpLoopNestAnalysis())
 LOOP_NEST_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
 #undef LOOP_NEST_ANALYSIS
