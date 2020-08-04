@@ -59,7 +59,6 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
     // Note that not only do we invalidate loop nest analyses on the root
     // loops, the loop anlayses on the subloops should also be cleared because
     // they depend on the standard analysis results as well.
-    dbgs() << "OK" << "\n";
     for (Loop *L : PreOrderLoops)
       InnerAM->clear(*L, "<possibly invalidated loop>");
     InnerAM = nullptr;

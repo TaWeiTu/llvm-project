@@ -139,6 +139,14 @@ public:
   /// Reconstruct the loop nest inplace.
   void reconstructInplace(ScalarEvolution &SE);
 
+  /// \c LoopNest object should be reconstructed instead of invalidated when the
+  /// structure changes since loop nest pass manager require the reference to
+  /// the loop nest to stay valid.
+  bool invalidate(Loop &L, const PreservedAnalyses &PA,
+                  LoopAnalysisManager::Invalidator &Inv) {
+    return false;
+  }
+
 protected:
   unsigned MaxPerfectDepth; // maximum perfect nesting depth level.
   LoopVectorTy Loops; // the loops in the nest (in breadth first order).
