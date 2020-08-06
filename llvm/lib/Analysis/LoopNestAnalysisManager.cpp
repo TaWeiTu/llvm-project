@@ -22,7 +22,6 @@ namespace llvm {
 
 template class AnalysisManager<LoopNest>;
 template class InnerAnalysisManagerProxy<LoopNestAnalysisManager, Function>;
-template class InnerAnalysisManagerProxy<LoopAnalysisManager, LoopNest>;
 template class OuterAnalysisManagerProxy<FunctionAnalysisManager, Loop,
                                          LoopStandardAnalysisResults &>;
 
@@ -110,6 +109,13 @@ bool LoopNestAnalysisManagerFunctionProxy::Result::invalidate(
   return false;
 }
 
+template <>
+LoopNestAnalysisManagerFunctionProxy::Result
+LoopNestAnalysisManagerFunctionProxy::run(Function &F,
+                                          FunctionAnalysisManager &AM) {
+  return Result(*InnerAM, AM.getResult<LoopAnalysis>(F));
+}
+
 void LoopNestAnalysisManager::invalidateSubLoopAnalyses(
     Loop &Root, const PreservedAnalyses &PA) {
   // We can return immediately if all the loop analyses are preserved.
@@ -119,24 +125,17 @@ void LoopNestAnalysisManager::invalidateSubLoopAnalyses(
 
   // Collect the loops in the subtree in post-order by performing DFS without
   // recursion using a stack.
-  SmallVector<Loop *, 4> Stack(Root.begin(), Root.end()), SubLoops;
-  while (!Stack.empty()) {
-    Loop *L = Stack.pop_back_val();
+  SmallVector<Loop *, 4> DFSStack(Root.begin(), Root.end()), SubLoops;
+  while (!DFSStack.empty()) {
+    Loop *L = DFSStack.pop_back_val();
     SubLoops.push_back(L);
-    Stack.append(L->begin(), L->end());
+    DFSStack.append(L->begin(), L->end());
   }
 
   // Visit the loops in reversed post-order and invalidate them.
   for (Loop *L : reverse(SubLoops)) {
     InternalLAM.invalidate(*L, PA);
   }
-}
-
-template <>
-LoopNestAnalysisManagerFunctionProxy::Result
-LoopNestAnalysisManagerFunctionProxy::run(Function &F,
-                                          FunctionAnalysisManager &AM) {
-  return Result(*InnerAM, AM.getResult<LoopAnalysis>(F));
 }
 
 } // namespace llvm

@@ -277,7 +277,12 @@ public:
     LoopAnalysisManager &LAM = AM.getLoopAnalysisManager();
 
     SmallPriorityWorklist<Loop *, 4> Worklist;
-    LPMUpdater Updater(Worklist, LAM);
+
+    // Pass a callback to LPMUpdater to get informed of newly added top-level
+    // loops.
+    std::function<void(ArrayRef<Loop *>)> Callback =
+        [&U](ArrayRef<Loop *> NewLoops) { U.addNewLoopNests(NewLoops); };
+    LPMUpdater Updater(Worklist, LAM, Callback);
     appendLoopNestToWorklist(LN.getOutermostLoop(), Worklist);
 
     assert(!Worklist.empty() &&
@@ -321,7 +326,9 @@ public:
         PI.runAfterPass<Loop>(Pass, *L);
 
       if (!Updater.SkipCurrentLoop)
-        // Invalidate the loop analysis results here.
+        // Invalidate the loop analysis results here. Note that even if the loop
+        // nest structure had been modified by the loop pass, the
+        // LoopNestAnalysis will not be invalidated here.
         LAM.invalidate(*L, PassPA);
 
       PA.intersect(std::move(PassPA));

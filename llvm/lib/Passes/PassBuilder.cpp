@@ -2470,7 +2470,7 @@ Error PassBuilder::parseFunctionPass(FunctionPassManager &FPM,
       // Because the LoopStandardAnalysisResults can only be constructed at
       // FunctionToLoopNestPassAdaptor but not at LoopNestToLoopPassAdaptor,
       // UseMemorySSA should depends on the loop passes as well.
-      // Memory SSA is needed true if either the loop nest explicitly requires
+      // Memory SSA is needed if either the loop nest explicitly requires
       // it or at least one of the loop passes wrapped inside the loop nest pass
       // requires it.
       bool UseMemorySSA = (Name == "loop-nest-mssa");

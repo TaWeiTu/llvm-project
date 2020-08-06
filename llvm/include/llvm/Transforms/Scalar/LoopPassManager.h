@@ -184,6 +184,12 @@ public:
 
     // No need to skip the current loop or revisit it, as sibling loops
     // shouldn't impact anything.
+
+    // If the current loop is a top-level loop and the loop passes are wrapped
+    // inside of a loop nest pass, inform the loop nest pass manager that new
+    // top-level loops are added.
+    if (!CurrentL->getParentLoop() && TopLevelLoopAdditionCallback)
+      (*TopLevelLoopAdditionCallback)(NewSibLoops);
   }
 
   /// Restart the current loop.
@@ -218,9 +224,17 @@ private:
   Loop *ParentL;
 #endif
 
+  // The updater should use the callback to inform the loop nest pass manager
+  // that new top-level loops are added.
+  //
+  // FIXME: There's probably a better way to do this (except declaring both
+  // LPMUpdater and LNPMUpdater in the same file).
+  Optional<std::function<void(ArrayRef<Loop *>)>> TopLevelLoopAdditionCallback;
+
   LPMUpdater(SmallPriorityWorklist<Loop *, 4> &Worklist,
-             LoopAnalysisManager &LAM)
-      : Worklist(Worklist), LAM(LAM) {}
+             LoopAnalysisManager &LAM,
+             Optional<std::function<void(ArrayRef<Loop *>)>> Callback = None)
+      : Worklist(Worklist), LAM(LAM), TopLevelLoopAdditionCallback(Callback) {}
 };
 
 // Collections of helper functions that are used by both loop pass manager and
