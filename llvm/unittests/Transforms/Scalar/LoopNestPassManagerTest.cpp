@@ -1212,4 +1212,9 @@ TEST_F(LoopNestPassManagerTest, RevisitCurrentLoopNest) {
   MPM.run(*M, MAM);
 }
 
+// Test the functionality of `addNewLoopNests()`. This includes adding loop
+// nests directly in loop nest passes, or indirectly via addition of top-level
+// loops in loop passes.
+TEST_F(LoopNestPassManagerTest, TopLevelLoopInsertion) {}
+
 } // namespace

@@ -927,12 +927,19 @@ TEST_F(LoopNestCallbacksTest, InstrumentedSkippedPasses) {
   EXPECT_CALL(CallbacksHandle,
               runBeforePass(HasNameRegex("MockPassHandle"), HasName("loop")))
       .WillOnce(Return(false));
+  EXPECT_CALL(
+      CallbacksHandle,
+      runBeforeSkippedPass(HasNameRegex("MockPassHandle"), HasName("loop")))
+      .Times(1);
 
   EXPECT_CALL(AnalysisHandle, run(HasName("loop"), _, _)).Times(0);
   EXPECT_CALL(PassHandle, run(HasName("loop"), _, _, _)).Times(0);
 
   // As the pass is skipped there is no afterPass, beforeAnalysis/afterAnalysis
   // as well.
+  EXPECT_CALL(CallbacksHandle,
+              runBeforeNonSkippedPass(HasNameRegex("MockPassHandle"), _))
+      .Times(0);
   EXPECT_CALL(CallbacksHandle, runAfterPass(HasNameRegex("MockPassHandle"), _))
       .Times(0);
   EXPECT_CALL(CallbacksHandle,
