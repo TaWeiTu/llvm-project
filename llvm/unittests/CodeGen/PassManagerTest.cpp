@@ -209,13 +209,14 @@ TEST_F(PassManagerTest, Basic) {
   M->setDataLayout(TM->createDataLayout());
 
   LoopAnalysisManager LAM(/*DebugLogging=*/true);
+  LoopNestAnalysisManager LNAM(LAM, /*DebugLogging=*/true);
   FunctionAnalysisManager FAM(/*DebugLogging=*/true);
   CGSCCAnalysisManager CGAM(/*DebugLogging=*/true);
   ModuleAnalysisManager MAM(/*DebugLogging=*/true);
   PassBuilder PB(TM.get());
   PB.registerModuleAnalyses(MAM);
   PB.registerFunctionAnalyses(FAM);
-  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+  PB.crossRegisterProxies(LAM, LNAM, FAM, CGAM, MAM);
 
   FAM.registerPass([&] { return TestFunctionAnalysis(); });
   FAM.registerPass([&] { return PassInstrumentationAnalysis(); });
