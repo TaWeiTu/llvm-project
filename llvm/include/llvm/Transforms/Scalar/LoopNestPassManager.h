@@ -219,6 +219,7 @@ public:
     // LoopNests. This precludes *any* invalidation of loop nest analyses by the
     // proxy, but that's OK because we've taken care to invalidate analyses in
     // the loop nest analysis manager incrementally above.
+    PA.preserveSet<AllAnalysesOn<Loop>>();
     PA.preserveSet<AllAnalysesOn<LoopNest>>();
     PA.preserve<LoopNestAnalysisManagerFunctionProxy>();
     // We also preserve the set of standard analyses.
@@ -281,7 +282,10 @@ public:
     // Pass a callback to LPMUpdater to get informed of newly added top-level
     // loops.
     std::function<void(ArrayRef<Loop *>)> Callback =
-        [&U](ArrayRef<Loop *> NewLoops) { U.addNewLoopNests(NewLoops); };
+        [&U](ArrayRef<Loop *> NewLoops) {
+          // LLVM_DEBUG(dbgs() << "Adding top-level loops from loop passes\n");
+          U.addNewLoopNests(NewLoops);
+        };
     LPMUpdater Updater(Worklist, LAM, Callback);
     appendLoopNestToWorklist(LN.getOutermostLoop(), Worklist);
 
@@ -341,6 +345,10 @@ public:
                                        "after traversing the loop nest.");
     if (Updater.skipCurrentLoop())
       U.markLoopNestAsDeleted(LN, LoopNestName);
+
+    if (!Updater.skipCurrentLoop() &&
+        !PA.getChecker<LoopNestAnalysis>().preserved())
+      LN.reconstructInplace(AR.SE);
 
     // We don't have to explicitly mark the loop standard analysis results as
     // preserved here since this will eventually be handled by the \c

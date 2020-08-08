@@ -207,6 +207,7 @@ unsigned LoopNest::getMaxPerfectDepth(const Loop &Root, ScalarEvolution &SE) {
 }
 
 void LoopNest::reconstructInplace(ScalarEvolution &SE) {
+  LLVM_DEBUG(dbgs() << "Reconstructing loop-nest: " << getName() << "\n");
   assert(!Loops.empty() && "Loop nest should contain the root loop.");
   Loop *Root = Loops[0];
   MaxPerfectDepth = getMaxPerfectDepth(*Root, SE);

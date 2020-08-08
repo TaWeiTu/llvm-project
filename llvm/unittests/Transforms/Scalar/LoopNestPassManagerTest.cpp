@@ -378,6 +378,51 @@ public:
   }
 };
 
+// Make sure that the IR is parsed correctly.
+TEST_F(LoopNestPassManagerTest, ParseIR) {
+  Function &F = *M->begin();
+  ASSERT_THAT(F, HasName("f"));
+  auto FBBI = F.begin();
+  BasicBlock &FEntry = *FBBI++;
+  ASSERT_THAT(FEntry, HasName("entry"));
+  BasicBlock &LoopF0BB = *FBBI++;
+  ASSERT_THAT(LoopF0BB, HasName("loop.f.0"));
+  BasicBlock &LoopF00PHBB = *FBBI++;
+  ASSERT_THAT(LoopF00PHBB, HasName("loop.f.0.0.ph"));
+  BasicBlock &LoopF00BB = *FBBI++;
+  ASSERT_THAT(LoopF00BB, HasName("loop.f.0.0"));
+  BasicBlock &LoopF01PHBB = *FBBI++;
+  ASSERT_THAT(LoopF01PHBB, HasName("loop.f.0.1.ph"));
+  BasicBlock &LoopF01BB = *FBBI++;
+  ASSERT_THAT(LoopF01BB, HasName("loop.f.0.1"));
+  BasicBlock &LoopF0LatchBB = *FBBI++;
+  ASSERT_THAT(LoopF0LatchBB, HasName("loop.f.0.latch"));
+  BasicBlock &FEnd = *FBBI++;
+  ASSERT_THAT(FEnd, HasName("end"));
+  ASSERT_THAT(FBBI, F.end());
+
+  Function &G = *std::next(M->begin());
+  ASSERT_THAT(G, HasName("g"));
+  auto GBBI = G.begin();
+  BasicBlock &GEntry = *GBBI++;
+  ASSERT_THAT(GEntry, HasName("entry"));
+  BasicBlock &LoopG0BB = *GBBI++;
+  ASSERT_THAT(LoopG0BB, HasName("loop.g.0"));
+  BasicBlock &LoopG1PHBB = *GBBI++;
+  ASSERT_THAT(LoopG1PHBB, HasName("loop.g.1.ph"));
+  BasicBlock &LoopG1BB = *GBBI++;
+  ASSERT_THAT(LoopG1BB, HasName("loop.g.1"));
+  BasicBlock &LoopG10PHBB = *GBBI++;
+  ASSERT_THAT(LoopG10PHBB, HasName("loop.g.1.0.ph"));
+  BasicBlock &LoopG10BB = *GBBI++;
+  ASSERT_THAT(LoopG10BB, HasName("loop.g.1.0"));
+  BasicBlock &LoopG1Latch = *GBBI++;
+  ASSERT_THAT(LoopG1Latch, HasName("loop.g.1.latch"));
+  BasicBlock &GEnd = *GBBI++;
+  ASSERT_THAT(GEnd, HasName("end"));
+  ASSERT_THAT(GBBI, G.end());
+}
+
 TEST_F(LoopNestPassManagerTest, Basic) {
   ModulePassManager MPM(true);
   ::testing::InSequence MakeExpectationsSequenced;
@@ -1215,6 +1260,174 @@ TEST_F(LoopNestPassManagerTest, RevisitCurrentLoopNest) {
 // Test the functionality of `addNewLoopNests()`. This includes adding loop
 // nests directly in loop nest passes, or indirectly via addition of top-level
 // loops in loop passes.
-TEST_F(LoopNestPassManagerTest, TopLevelLoopInsertion) {}
+TEST_F(LoopNestPassManagerTest, TopLevelLoopInsertion) {
+  M = parseIR(Context,
+              "define void @f(i1* %ptr) {\n"
+              "entry:\n"
+              "  br label %loop.0\n"
+              "loop.0:\n"
+              "  %cond.0 = load volatile i1, i1* %ptr\n"
+              "  br i1 %cond.0, label %loop.0.0.ph, label %loop.2.ph\n"
+              "loop.0.0.ph:\n"
+              "  br label %loop.0.0\n"
+              "loop.0.0:\n"
+              "  %cond.0.0 = load volatile i1, i1* %ptr\n"
+              "  br i1 %cond.0.0, label %loop.0.0, label %loop.0.2.ph\n"
+              "loop.0.2.ph:\n"
+              "  br label %loop.0.2\n"
+              "loop.0.2:\n"
+              "  %cond.0.2 = load volatile i1, i1* %ptr\n"
+              "  br i1 %cond.0.2, label %loop.0.2, label %loop.0.latch\n"
+              "loop.0.latch:\n"
+              "  br label %loop.0\n"
+              "loop.2.ph:\n"
+              "  br label %loop.2\n"
+              "loop.2:\n"
+              "  %cond.2 = load volatile i1, i1* %ptr\n"
+              "  br i1 %cond.2, label %loop.2, label %end\n"
+              "end:\n"
+              "  ret void\n"
+              "}\n");
+  // Build up variables referring into the IR so we can rewrite it below
+  // easily.
+  Function &F = *M->begin();
+  ASSERT_THAT(F, HasName("f"));
+  Argument &Ptr = *F.arg_begin();
+  auto BBI = F.begin();
+  BasicBlock &EntryBB = *BBI++;
+  ASSERT_THAT(EntryBB, HasName("entry"));
+  BasicBlock &Loop0BB = *BBI++;
+  ASSERT_THAT(Loop0BB, HasName("loop.0"));
+  BasicBlock &Loop00PHBB = *BBI++;
+  ASSERT_THAT(Loop00PHBB, HasName("loop.0.0.ph"));
+  BasicBlock &Loop00BB = *BBI++;
+  ASSERT_THAT(Loop00BB, HasName("loop.0.0"));
+  BasicBlock &Loop02PHBB = *BBI++;
+  ASSERT_THAT(Loop02PHBB, HasName("loop.0.2.ph"));
+  BasicBlock &Loop02BB = *BBI++;
+  ASSERT_THAT(Loop02BB, HasName("loop.0.2"));
+  BasicBlock &Loop0LatchBB = *BBI++;
+  ASSERT_THAT(Loop0LatchBB, HasName("loop.0.latch"));
+  BasicBlock &Loop2PHBB = *BBI++;
+  ASSERT_THAT(Loop2PHBB, HasName("loop.2.ph"));
+  BasicBlock &Loop2BB = *BBI++;
+  ASSERT_THAT(Loop2BB, HasName("loop.2"));
+  BasicBlock &EndBB = *BBI++;
+  ASSERT_THAT(EndBB, HasName("end"));
+  ASSERT_THAT(BBI, F.end());
+
+  ::testing::InSequence MakeExpectationsSequenced;
+  FunctionPassManager FPM(true);
+
+  // First we add loop.0.1 between loop.0.0 and loop.0.2. This should not
+  // trigger the addition of top-level loop.
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _))
+      .WillOnce(Invoke([&](Loop &L, LoopAnalysisManager &AM,
+                           LoopStandardAnalysisResults &AR, LPMUpdater &U) {
+        auto *NewLoop01 = AR.LI.AllocateLoop();
+        L.getParentLoop()->addChildLoop(NewLoop01);
+        auto *NewLoop01PHBB =
+            BasicBlock::Create(Context, "loop.0.1.ph", &F, &Loop02PHBB);
+        auto *NewLoop01BB =
+            BasicBlock::Create(Context, "loop.0.1", &F, &Loop02PHBB);
+        BranchInst::Create(NewLoop01BB, NewLoop01PHBB);
+        auto *NewCond01 = new LoadInst(Type::getInt1Ty(Context), &Ptr,
+                                       "cond.0.1", true, NewLoop01BB);
+        BranchInst::Create(&Loop02PHBB, NewLoop01BB, NewCond01, NewLoop01BB);
+        Loop00BB.getTerminator()->replaceUsesOfWith(&Loop02PHBB, NewLoop01PHBB);
+        AR.DT.addNewBlock(NewLoop01PHBB, &Loop00BB);
+        auto *NewDTNode = AR.DT.addNewBlock(NewLoop01BB, NewLoop01PHBB);
+        AR.DT.changeImmediateDominator(AR.DT[&Loop02PHBB], NewDTNode);
+        EXPECT_TRUE(AR.DT.verify());
+        L.getParentLoop()->addBasicBlockToLoop(NewLoop01PHBB, AR.LI);
+        NewLoop01->addBasicBlockToLoop(NewLoop01BB, AR.LI);
+        L.getParentLoop()->verifyLoop();
+        U.addSiblingLoops({NewLoop01});
+        return getLoopPassPreservedAnalyses();
+      }));
+
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.2"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.2"), _, _, _));
+
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(
+      createLoopNestToLoopPassAdaptor(MLPHandle.getPass())));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.2"), _, _, _));
+  // loop.0.1 is added later
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _));
+
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(Invoke([&](Loop &L, LoopAnalysisManager &AM,
+                           LoopStandardAnalysisResults &AR, LPMUpdater &U) {
+        auto *NewLoop1 = AR.LI.AllocateLoop();
+        AR.LI.addTopLevelLoop(NewLoop1);
+        auto *NewLoop10 = AR.LI.AllocateLoop();
+        NewLoop1->addChildLoop(NewLoop10);
+        auto *NewLoop1PHBB =
+            BasicBlock::Create(Context, "loop.1.ph", &F, &Loop2PHBB);
+        auto *NewLoop1BB =
+            BasicBlock::Create(Context, "loop.1", &F, &Loop2PHBB);
+        auto *NewLoop10PHBB =
+            BasicBlock::Create(Context, "loop.1.0.ph", &F, &Loop2PHBB);
+        auto *NewLoop10BB =
+            BasicBlock::Create(Context, "loop.1.0", &F, &Loop2PHBB);
+        auto *NewLoop1LatchBB =
+            BasicBlock::Create(Context, "loop.1.latch", &F, &Loop2PHBB);
+        BranchInst::Create(NewLoop1BB, NewLoop1PHBB);
+        BranchInst::Create(NewLoop10BB, NewLoop10PHBB);
+        auto *NewCond1 = new LoadInst(Type::getInt1Ty(Context), &Ptr, "cond.1",
+                                      true, NewLoop1BB);
+        BranchInst::Create(NewLoop10PHBB, &Loop2PHBB, NewCond1, NewLoop1BB);
+        auto *NewCond10 = new LoadInst(Type::getInt1Ty(Context), &Ptr,
+                                       "cond.1.0", true, NewLoop10BB);
+        BranchInst::Create(NewLoop10BB, NewLoop1LatchBB, NewCond10,
+                           NewLoop10BB);
+        BranchInst::Create(NewLoop1BB, NewLoop1LatchBB);
+        Loop0BB.getTerminator()->replaceUsesOfWith(&Loop2PHBB, NewLoop1PHBB);
+
+        AR.DT.addNewBlock(NewLoop1PHBB, &Loop0BB);
+        AR.DT.addNewBlock(NewLoop1BB, NewLoop1PHBB);
+        AR.DT.addNewBlock(NewLoop10PHBB, NewLoop1BB);
+        AR.DT.addNewBlock(NewLoop10BB, NewLoop10PHBB);
+        AR.DT.addNewBlock(NewLoop1LatchBB, NewLoop10BB);
+        AR.DT.changeImmediateDominator(AR.DT[&Loop2PHBB], AR.DT[NewLoop1BB]);
+        EXPECT_TRUE(AR.DT.verify());
+        NewLoop1->addBasicBlockToLoop(NewLoop1BB, AR.LI);
+        NewLoop1->addBasicBlockToLoop(NewLoop10PHBB, AR.LI);
+        NewLoop10->addBasicBlockToLoop(NewLoop10BB, AR.LI);
+        NewLoop1->addBasicBlockToLoop(NewLoop1LatchBB, AR.LI);
+        NewLoop1->verifyLoop();
+        U.addSiblingLoops({NewLoop1});
+        return getLoopPassPreservedAnalyses();
+      }));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.1"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.1.0"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.1"), _, _, _));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.2"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.2"), _, _, _));
+
+  LoopNestPassManager LNPM(true);
+  LNPM.addPass(MLNPHandle.getPass());
+  LNPM.addPass(createLoopNestToLoopPassAdaptor(MLPHandle.getPass()));
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(std::move(LNPM)));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.1"), _, _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.2"), _, _, _));
+
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(MLNPHandle.getPass()));
+  FPM.addPass(DominatorTreeVerifierPass());
+  FPM.addPass(LoopVerifierPass());
+  ModulePassManager MPM(true);
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+
+  MPM.run(*M, MAM);
+}
 
 } // namespace

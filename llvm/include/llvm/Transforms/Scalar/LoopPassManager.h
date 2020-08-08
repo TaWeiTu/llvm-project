@@ -180,16 +180,19 @@ public:
              "All of the new loops must be siblings of the current loop!");
 #endif
 
-    appendLoopsToWorklist(NewSibLoops, Worklist);
-
-    // No need to skip the current loop or revisit it, as sibling loops
-    // shouldn't impact anything.
-
     // If the current loop is a top-level loop and the loop passes are wrapped
     // inside of a loop nest pass, inform the loop nest pass manager that new
     // top-level loops are added.
+    //
+    // Note that the loops are not inserted to the worklist in this case because
+    // those loops don't belong to the current loop nest.
     if (!CurrentL->getParentLoop() && TopLevelLoopAdditionCallback)
       (*TopLevelLoopAdditionCallback)(NewSibLoops);
+    else
+      appendLoopsToWorklist(NewSibLoops, Worklist);
+
+    // No need to skip the current loop or revisit it, as sibling loops
+    // shouldn't impact anything.
   }
 
   /// Restart the current loop.
