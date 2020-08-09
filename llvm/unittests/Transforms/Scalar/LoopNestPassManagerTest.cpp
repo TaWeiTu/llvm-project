@@ -1324,6 +1324,7 @@ TEST_F(LoopNestPassManagerTest, TopLevelLoopInsertion) {
   EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _))
       .WillOnce(Invoke([&](Loop &L, LoopAnalysisManager &AM,
                            LoopStandardAnalysisResults &AR, LPMUpdater &U) {
+        getLoopAnalysisResult(L, AM, AR, U);
         auto *NewLoop01 = AR.LI.AllocateLoop();
         L.getParentLoop()->addChildLoop(NewLoop01);
         auto *NewLoop01PHBB =
@@ -1345,24 +1346,41 @@ TEST_F(LoopNestPassManagerTest, TopLevelLoopInsertion) {
         U.addSiblingLoops({NewLoop01});
         return getLoopPassPreservedAnalyses();
       }));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.0.0"), _, _));
 
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.2"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.2"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.0.1"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.2"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.0.2"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.0"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.2"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.2"), _, _));
 
   FPM.addPass(createFunctionToLoopNestPassAdaptor(
       createLoopNestToLoopPassAdaptor(MLPHandle.getPass())));
 
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.2"), _, _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.0"), _, _));
+  // The previous pass does not preserve the analysis result.
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.0.0"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.2"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
   // loop.0.1 is added later
-  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
 
   EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
       .WillOnce(Invoke([&](Loop &L, LoopAnalysisManager &AM,
                            LoopStandardAnalysisResults &AR, LPMUpdater &U) {
+        getLoopAnalysisResult(L, AM, AR, U);
         auto *NewLoop1 = AR.LI.AllocateLoop();
         AR.LI.addTopLevelLoop(NewLoop1);
         auto *NewLoop10 = AR.LI.AllocateLoop();
@@ -1402,32 +1420,270 @@ TEST_F(LoopNestPassManagerTest, TopLevelLoopInsertion) {
         NewLoop1->addBasicBlockToLoop(NewLoop1LatchBB, AR.LI);
         NewLoop1->verifyLoop();
         U.addSiblingLoops({NewLoop1});
-        return getLoopPassPreservedAnalyses();
+        auto PA = getLoopPassPreservedAnalyses();
+        PA.preserve<LoopNestAnalysis>();
+        return PA;
       }));
 
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.1"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.1.0"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.1"), _, _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.1"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.1"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.1.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.1.0"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.1"), _, _));
 
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.2"), _, _, _));
-  EXPECT_CALL(MLPHandle, run(HasName("loop.2"), _, _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.2"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.2"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.2"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
 
-  LoopNestPassManager LNPM(true);
-  LNPM.addPass(MLNPHandle.getPass());
-  LNPM.addPass(createLoopNestToLoopPassAdaptor(MLPHandle.getPass()));
-  FPM.addPass(createFunctionToLoopNestPassAdaptor(std::move(LNPM)));
+  {
+    LoopNestPassManager LNPM(true);
+    LNPM.addPass(MLNPHandle.getPass());
+    LNPM.addPass(createLoopNestToLoopPassAdaptor(MLPHandle.getPass()));
+    FPM.addPass(createFunctionToLoopNestPassAdaptor(std::move(LNPM)));
+  }
 
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.1"), _, _, _));
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _));
-  EXPECT_CALL(MLNPHandle, run(HasName("loop.2"), _, _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.1"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.0"), _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.2"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
 
   FPM.addPass(createFunctionToLoopNestPassAdaptor(MLNPHandle.getPass()));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.1"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.1.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.2"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.0"), _, _));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.2"), _, _, _))
+      .WillOnce(Invoke([&](LoopNest &LN, LoopNestAnalysisManager &AM,
+                           LoopStandardAnalysisResults &AR, LNPMUpdater &U) {
+        getLoopNestAnalysisResult(LN, AM, AR, U);
+        auto *NewLoop3 = AR.LI.AllocateLoop();
+        auto *NewLoop4 = AR.LI.AllocateLoop();
+        auto *NewLoop40 = AR.LI.AllocateLoop();
+        auto *NewLoop41 = AR.LI.AllocateLoop();
+        AR.LI.addTopLevelLoop(NewLoop3);
+        AR.LI.addTopLevelLoop(NewLoop4);
+        NewLoop4->addChildLoop(NewLoop40);
+        NewLoop4->addChildLoop(NewLoop41);
+        auto *NewLoop3PHBB =
+            BasicBlock::Create(Context, "loop.3.ph", &F, &EndBB);
+        auto *NewLoop3BB = BasicBlock::Create(Context, "loop.3", &F, &EndBB);
+        auto *NewLoop4PHBB =
+            BasicBlock::Create(Context, "loop.4.ph", &F, &EndBB);
+        auto *NewLoop4BB = BasicBlock::Create(Context, "loop.4", &F, &EndBB);
+        auto *NewLoop40PHBB =
+            BasicBlock::Create(Context, "loop.4.0.ph", &F, &EndBB);
+        auto *NewLoop40BB = BasicBlock::Create(Context, "loop.4.0", &F, &EndBB);
+        auto *NewLoop41PHBB =
+            BasicBlock::Create(Context, "loop.4.1.ph", &F, &EndBB);
+        auto *NewLoop41BB = BasicBlock::Create(Context, "loop.4.1", &F, &EndBB);
+        auto *NewLoop4LatchBB =
+            BasicBlock::Create(Context, "loop.4.latch", &F, &EndBB);
+        BranchInst::Create(NewLoop4BB, NewLoop4PHBB);
+        BranchInst::Create(NewLoop40BB, NewLoop40PHBB);
+        BranchInst::Create(NewLoop41BB, NewLoop41PHBB);
+        BranchInst::Create(NewLoop4BB, NewLoop4LatchBB);
+        auto *NewCond4 = new LoadInst(Type::getInt1Ty(Context), &Ptr, "cond.4",
+                                      true, NewLoop4BB);
+        BranchInst::Create(NewLoop40PHBB, &EndBB, NewCond4, NewLoop4BB);
+        auto *NewCond40 = new LoadInst(Type::getInt1Ty(Context), &Ptr,
+                                       "cond.4.0", true, NewLoop40BB);
+        BranchInst::Create(NewLoop40BB, NewLoop41PHBB, NewCond40, NewLoop40BB);
+        auto *NewCond41 = new LoadInst(Type::getInt1Ty(Context), &Ptr,
+                                       "cond.4.1", true, NewLoop41BB);
+        BranchInst::Create(NewLoop41BB, NewLoop4LatchBB, NewCond41,
+                           NewLoop41BB);
+        BranchInst::Create(NewLoop3BB, NewLoop3PHBB);
+        auto *NewCond3 = new LoadInst(Type::getInt1Ty(Context), &Ptr, "cond.3",
+                                      true, NewLoop3BB);
+        BranchInst::Create(NewLoop3BB, NewLoop4PHBB, NewCond3, NewLoop3BB);
+        Loop2BB.getTerminator()->replaceUsesOfWith(&EndBB, NewLoop3PHBB);
+
+        AR.DT.addNewBlock(NewLoop3PHBB, &Loop2BB);
+        AR.DT.addNewBlock(NewLoop3BB, NewLoop3PHBB);
+        AR.DT.addNewBlock(NewLoop4PHBB, NewLoop3BB);
+        AR.DT.addNewBlock(NewLoop4BB, NewLoop4PHBB);
+        AR.DT.addNewBlock(NewLoop40PHBB, NewLoop4BB);
+        AR.DT.addNewBlock(NewLoop40BB, NewLoop40PHBB);
+        AR.DT.addNewBlock(NewLoop41PHBB, NewLoop40BB);
+        AR.DT.addNewBlock(NewLoop41BB, NewLoop41PHBB);
+        AR.DT.addNewBlock(NewLoop4LatchBB, NewLoop41BB);
+        AR.DT.changeImmediateDominator(AR.DT[&EndBB], AR.DT[NewLoop4BB]);
+        EXPECT_TRUE(AR.DT.verify());
+
+        NewLoop3->addBasicBlockToLoop(NewLoop3BB, AR.LI);
+        NewLoop4->addBasicBlockToLoop(NewLoop4BB, AR.LI);
+        NewLoop4->addBasicBlockToLoop(NewLoop40PHBB, AR.LI);
+        NewLoop4->addBasicBlockToLoop(NewLoop41PHBB, AR.LI);
+        NewLoop4->addBasicBlockToLoop(NewLoop4LatchBB, AR.LI);
+        NewLoop40->addBasicBlockToLoop(NewLoop40BB, AR.LI);
+        NewLoop41->addBasicBlockToLoop(NewLoop41BB, AR.LI);
+        NewLoop3->verifyLoop();
+        NewLoop4->verifyLoop();
+        U.addNewLoopNests({NewLoop3, NewLoop4});
+        auto PA = getLoopPassPreservedAnalyses();
+        PA.preserve<LoopNestAnalysis>();
+        return PA;
+      }));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.2"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.2"), _, _));
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.4"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.4"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.4.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.4.0"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.4.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.4.1"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.4"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.4"), _, _));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.3"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.3"), _, _));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.3"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLAHandle, run(HasName("loop.3"), _, _));
+
+  {
+    LoopNestPassManager LNPM(true);
+    LNPM.addPass(MLNPHandle.getPass());
+    LNPM.addPass(createLoopNestToLoopPassAdaptor(MLPHandle.getPass()));
+    FPM.addPass(createFunctionToLoopNestPassAdaptor(std::move(LNPM)));
+  }
+
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.4"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.3"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.1"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNPHandle, run(HasName("loop.2"), _, _, _))
+      .WillOnce(Invoke(getLoopNestAnalysisResult));
+  EXPECT_CALL(MLNAHandle, run(HasName("loop.2"), _, _));
+
+  FPM.addPass(createFunctionToLoopNestPassAdaptor(MLNPHandle.getPass()));
+
+  EXPECT_CALL(MLPHandle, run(HasName("loop.4.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.4.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.4"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.3"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.1.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.2"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0.1"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.0"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+  EXPECT_CALL(MLPHandle, run(HasName("loop.2"), _, _, _))
+      .WillOnce(Invoke(getLoopAnalysisResult));
+
+  FPM.addPass(createFunctionToLoopPassAdaptor(MLPHandle.getPass()));
+
   FPM.addPass(DominatorTreeVerifierPass());
   FPM.addPass(LoopVerifierPass());
   ModulePassManager MPM(true);
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
 
   MPM.run(*M, MAM);
+
+  // Finally check the correctness of the loop structure after the addition of
+  // new loops.
+  {
+    Function &F = *M->begin();
+    ASSERT_THAT(F, HasName("f"));
+    auto BBI = F.begin();
+    BasicBlock &EntryBB = *BBI++;
+    ASSERT_THAT(EntryBB, HasName("entry"));
+    BasicBlock &Loop0BB = *BBI++;
+    ASSERT_THAT(Loop0BB, HasName("loop.0"));
+    BasicBlock &Loop00PHBB = *BBI++;
+    ASSERT_THAT(Loop00PHBB, HasName("loop.0.0.ph"));
+    BasicBlock &Loop00BB = *BBI++;
+    ASSERT_THAT(Loop00BB, HasName("loop.0.0"));
+    BasicBlock &Loop01PHBB = *BBI++;
+    ASSERT_THAT(Loop01PHBB, HasName("loop.0.1.ph"));
+    BasicBlock &Loop01BB = *BBI++;
+    ASSERT_THAT(Loop01BB, HasName("loop.0.1"));
+    BasicBlock &Loop02PHBB = *BBI++;
+    ASSERT_THAT(Loop02PHBB, HasName("loop.0.2.ph"));
+    BasicBlock &Loop02BB = *BBI++;
+    ASSERT_THAT(Loop02BB, HasName("loop.0.2"));
+    BasicBlock &Loop0LatchBB = *BBI++;
+    ASSERT_THAT(Loop0LatchBB, HasName("loop.0.latch"));
+    BasicBlock &Loop1PHBB = *BBI++;
+    ASSERT_THAT(Loop1PHBB, HasName("loop.1.ph"));
+    BasicBlock &Loop1BB = *BBI++;
+    ASSERT_THAT(Loop1BB, HasName("loop.1"));
+    BasicBlock &Loop10PHBB = *BBI++;
+    ASSERT_THAT(Loop10PHBB, HasName("loop.1.0.ph"));
+    BasicBlock &Loop10BB = *BBI++;
+    ASSERT_THAT(Loop10BB, HasName("loop.1.0"));
+    BasicBlock &Loop1LatchBB = *BBI++;
+    ASSERT_THAT(Loop1LatchBB, HasName("loop.1.latch"));
+    BasicBlock &Loop2PHBB = *BBI++;
+    ASSERT_THAT(Loop2PHBB, HasName("loop.2.ph"));
+    BasicBlock &Loop2BB = *BBI++;
+    ASSERT_THAT(Loop2BB, HasName("loop.2"));
+    BasicBlock &Loop3PHBB = *BBI++;
+    ASSERT_THAT(Loop3PHBB, HasName("loop.3.ph"));
+    BasicBlock &Loop3BB = *BBI++;
+    ASSERT_THAT(Loop3BB, HasName("loop.3"));
+    BasicBlock &Loop4PHBB = *BBI++;
+    ASSERT_THAT(Loop4PHBB, HasName("loop.4.ph"));
+    BasicBlock &Loop4BB = *BBI++;
+    ASSERT_THAT(Loop4BB, HasName("loop.4"));
+    BasicBlock &Loop40PHBB = *BBI++;
+    ASSERT_THAT(Loop40PHBB, HasName("loop.4.0.ph"));
+    BasicBlock &Loop40BB = *BBI++;
+    ASSERT_THAT(Loop40BB, HasName("loop.4.0"));
+    BasicBlock &Loop41PHBB = *BBI++;
+    ASSERT_THAT(Loop41PHBB, HasName("loop.4.1.ph"));
+    BasicBlock &Loop41BB = *BBI++;
+    ASSERT_THAT(Loop41BB, HasName("loop.4.1"));
+    BasicBlock &Loop4LatchBB = *BBI++;
+    ASSERT_THAT(Loop4LatchBB, HasName("loop.4.latch"));
+    BasicBlock &EndBB = *BBI++;
+    ASSERT_THAT(EndBB, HasName("end"));
+    ASSERT_THAT(BBI, F.end());
+  }
 }
 
 } // namespace
