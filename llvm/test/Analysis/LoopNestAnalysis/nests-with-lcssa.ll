@@ -1,8 +1,17 @@
 ; RUN: opt -S -passes='loop-rotate,print<loopnest>' < %s 2>&1 > /dev/null | FileCheck %s
+
+; int f(int N, int M) {
+;   int res = 0;
+;   for (int i = 0; i < N; ++i) {
+;     for (int j = 0; j < M; ++j) res += i * j;
+;   }
+;   return res;
+; }
+
 ; Function Attrs: noinline nounwind optnone
+define i32 @f(i32 %N, i32 %M) #0 {
 ; CHECK: IsPerfect=true, Depth=1, OutermostLoop: for.body3, Loops: ( for.body3 )
 ; CHECK: IsPerfect=true, Depth=2, OutermostLoop: for.body, Loops: ( for.body for.body3 )
-define i32 @f(i32 %N, i32 %M) #0 {
 entry:
   br label %for.cond
 
@@ -41,11 +50,24 @@ for.end6:                                         ; preds = %for.cond
   ret i32 %res.0
 }
 
+; int g(int N, int M, int K) {
+;   int sum = 0, prod = 1;
+;   for (int i = 0; i < N; ++i) {
+;     for (int j = 0; j < M; ++j) {
+;       for (int k = 0; k < K; ++k) {
+;         sum += i * j * k;
+;       }
+;       prod *= (i + j);
+;     }
+;   }
+;   return sum + prod;
+; }
+
 ; Function Attrs: noinline nounwind optnone
+define i32 @g(i32 %N, i32 %M, i32 %K) #0 {
 ; CHECK: IsPerfect=true, Depth=1, OutermostLoop: for.body6, Loops: ( for.body6 )
 ; CHECK: IsPerfect=false, Depth=2, OutermostLoop: for.body3, Loops: ( for.body3 for.body6 )
 ; CHECK: IsPerfect=false, Depth=3, OutermostLoop: for.body, Loops: ( for.body for.body3 for.body6 )
-define i32 @g(i32 %N, i32 %M, i32 %K) #0 {
 entry:
   br label %for.cond
 
@@ -106,11 +128,23 @@ for.end15:                                        ; preds = %for.cond
   ret i32 %add16
 }
 
+; int h(int N, int M, int K) {
+;   int sum = 0;
+;   for (int i = 0; i < N; ++i) {
+;     for (int j = 0; j < M; ++j) {
+;       for (int k = 0; k < K; ++k) {
+;         sum += i * j * k;
+;       }
+;     }
+;   }
+;   return sum;
+; }
+
 ; Function Attrs: noinline nounwind optnone
+define i32 @h(i32 %N, i32 %M, i32 %K) #0 {
 ; CHECK: IsPerfect=true, Depth=1, OutermostLoop: for.body6, Loops: ( for.body6 )
 ; CHECK: IsPerfect=true, Depth=2, OutermostLoop: for.body3, Loops: ( for.body3 for.body6 )
 ; CHECK: IsPerfect=true, Depth=3, OutermostLoop: for.body, Loops: ( for.body for.body3 for.body6 )
-define i32 @h(i32 %N, i32 %M, i32 %K) #0 {
 entry:
   br label %for.cond
 
