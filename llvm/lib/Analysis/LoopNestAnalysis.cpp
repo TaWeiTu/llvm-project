@@ -228,12 +228,16 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
       InnerLoop.getExitingBlock() != InnerLoopLatch || !InnerLoopExit)
     return false;
 
-  auto IsLCSSABlock = [](const BasicBlock &B) {
-    return all_of(B, [](const Instruction &I) {
+  auto IsLCSSABlock = [&](const BasicBlock &B) {
+    return all_of(B, [&](const Instruction &I) {
       if (isa<BranchInst>(&I))
         return true;
       const PHINode *PN = dyn_cast<PHINode>(&I);
-      return PN && PN->getNumIncomingValues();
+      if (!PN)
+        return false;
+      return all_of(PN->blocks(), [&](const BasicBlock *Source) {
+        return Source == InnerLoopExit || Source == OuterLoopHeader;
+      });
     });
   };
 
