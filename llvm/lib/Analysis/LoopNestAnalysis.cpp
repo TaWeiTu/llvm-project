@@ -228,15 +228,12 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
       InnerLoop.getExitingBlock() != InnerLoopLatch || !InnerLoopExit)
     return false;
 
-  auto IsLCSSABlock = [](const BasicBlock *B) {
-    if (!B)
-      return false;
-
-    return all_of(*B, [](const Instruction &I) {
+  auto IsLCSSABlock = [](const BasicBlock &B) {
+    return all_of(B, [](const Instruction &I) {
       if (isa<BranchInst>(&I))
         return true;
       const PHINode *PN = dyn_cast<PHINode>(&I);
-      return PN && PN->getName().endswith(".lcssa");
+      return PN && PN->getNumIncomingValues();
     });
   };
 
@@ -256,7 +253,7 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
         continue;
       if (Succ == OuterLoopLatch)
         continue;
-      if (IsLCSSABlock(Succ) && Succ->getSingleSuccessor() == OuterLoopLatch)
+      if (IsLCSSABlock(*Succ) && Succ->getSingleSuccessor() == OuterLoopLatch)
         continue;
 
       DEBUG_WITH_TYPE(VerboseDebug, {
@@ -271,7 +268,7 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
   // Ensure the inner loop exit block leads to the outer loop latch.
   const BasicBlock *SuccInner = InnerLoopExit->getSingleSuccessor();
   if (!SuccInner || (SuccInner != OuterLoopLatch &&
-                     (!IsLCSSABlock(SuccInner) ||
+                     (!IsLCSSABlock(*SuccInner) ||
                       SuccInner->getSingleSuccessor() != OuterLoopLatch))) {
     DEBUG_WITH_TYPE(
         VerboseDebug,
