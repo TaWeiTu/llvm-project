@@ -249,9 +249,9 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
     });
   };
 
+  const BasicBlock *ExtraPhiBlock = nullptr;
   // Ensure the only branch that may exist between the loops is the inner loop
   // guard.
-  const BasicBlock *ExtraPhiBlock = nullptr;
   if (OuterLoopHeader != InnerLoopPreHeader) {
     const BranchInst *BI =
         dyn_cast<BranchInst>(OuterLoopHeader->getTerminator());
@@ -269,8 +269,16 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
       if (Succ == OuterLoopLatch)
         continue;
 
+      // If `InnerLoopExit` contains LCSSA Phi instructions, additional block
+      // may be inserted before the `OuterLoopLatch` to which `BI` jumps. The
+      // loops are still considered perfectly nested if the extra block only
+      // contains Phi instructions from InnerLoopExit and OuterLoopHeader.
       if (InnerLoopExitContainsLCSSA && IsExtraPhiBlock(*Succ) &&
           Succ->getSingleSuccessor() == OuterLoopLatch) {
+        // Points to the extra block so that we can reference it later in the
+        // final check. We can also conclude that the inner loop is
+        // guarded and there exists LCSSA Phi node in the exit block later if we
+        // see a non-null `ExtraPhiBlock`.
         ExtraPhiBlock = Succ;
         continue;
       }
