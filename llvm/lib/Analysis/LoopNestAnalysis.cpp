@@ -228,7 +228,15 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
       InnerLoop.getExitingBlock() != InnerLoopLatch || !InnerLoopExit)
     return false;
 
-  auto IsLCSSABlock = [&](const BasicBlock &B) {
+  // Returns whether the block B contains at least one LCSSA Phi node.
+  auto ContainsLCSSAPhi = [](const BasicBlock &B) {
+    return any_of(B, [&](const Instruction &I) {
+      const PHINode *PN = dyn_cast<PHINode>(&I);
+      return PN && PN->getNumIncomingValues() == 1;
+    });
+  };
+
+  auto IsExtraPhiBlock = [&](const BasicBlock &B) {
     return all_of(B, [&](const Instruction &I) {
       if (isa<BranchInst>(&I))
         return true;
@@ -243,12 +251,15 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
 
   // Ensure the only branch that may exist between the loops is the inner loop
   // guard.
+  const BasicBlock *ExtraPhiBlock = nullptr;
   if (OuterLoopHeader != InnerLoopPreHeader) {
     const BranchInst *BI =
         dyn_cast<BranchInst>(OuterLoopHeader->getTerminator());
 
     if (!BI || BI != InnerLoop.getLoopGuardBranch())
       return false;
+
+    bool InnerLoopExitContainsLCSSA = ContainsLCSSAPhi(*InnerLoopExit);
 
     // The successors of the inner loop guard should be the inner loop
     // preheader and the outer loop latch.
@@ -257,8 +268,12 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
         continue;
       if (Succ == OuterLoopLatch)
         continue;
-      if (IsLCSSABlock(*Succ) && Succ->getSingleSuccessor() == OuterLoopLatch)
+
+      if (InnerLoopExitContainsLCSSA && IsExtraPhiBlock(*Succ) &&
+          Succ->getSingleSuccessor() == OuterLoopLatch) {
+        ExtraPhiBlock = Succ;
         continue;
+      }
 
       DEBUG_WITH_TYPE(VerboseDebug, {
         dbgs() << "Inner loop guard successor " << Succ->getName()
@@ -271,9 +286,8 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
 
   // Ensure the inner loop exit block leads to the outer loop latch.
   const BasicBlock *SuccInner = InnerLoopExit->getSingleSuccessor();
-  if (!SuccInner || (SuccInner != OuterLoopLatch &&
-                     (!IsLCSSABlock(*SuccInner) ||
-                      SuccInner->getSingleSuccessor() != OuterLoopLatch))) {
+  if (!SuccInner ||
+      (SuccInner != OuterLoopLatch && SuccInner != ExtraPhiBlock)) {
     DEBUG_WITH_TYPE(
         VerboseDebug,
         dbgs() << "Inner loop exit block " << *InnerLoopExit
