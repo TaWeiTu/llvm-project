@@ -228,25 +228,24 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
       InnerLoop.getExitingBlock() != InnerLoopLatch || !InnerLoopExit)
     return false;
 
-  // Returns whether the block B contains at least one LCSSA Phi node.
-  auto ContainsLCSSAPhi = [](const BasicBlock &B) {
-    return any_of(B, [&](const Instruction &I) {
-      const PHINode *PN = dyn_cast<PHINode>(&I);
-      return PN && PN->getNumIncomingValues() == 1;
+  // Returns whether the block `ExitBlock` contains at least one LCSSA Phi node.
+  auto ContainsLCSSAPhi = [](const BasicBlock &ExitBlock) {
+    return any_of(ExitBlock.phis(), [&](const PHINode &PN) {
+      return PN.getNumIncomingValues() == 1;
     });
   };
 
-  auto IsExtraPhiBlock = [&](const BasicBlock &B) {
-    return all_of(B, [&](const Instruction &I) {
-      if (isa<BranchInst>(&I))
-        return true;
-      const PHINode *PN = dyn_cast<PHINode>(&I);
-      if (!PN)
-        return false;
-      return all_of(PN->blocks(), [&](const BasicBlock *Source) {
-        return Source == InnerLoopExit || Source == OuterLoopHeader;
-      });
-    });
+  // Returns whether the block `BB` qualifies for being an extra Phi block. The
+  // extra Phi block is the additional block inserted after the exit block of an
+  // "guarded" inner loop which contains "only" Phi nodes corresponding to the
+  // LCSSA Phi nodes in the exit block.
+  auto IsExtraPhiBlock = [&](const BasicBlock &BB) {
+    return BB.getFirstNonPHI() == BB.getTerminator() &&
+           all_of(BB.phis(), [&](const PHINode &PN) {
+             return all_of(PN.blocks(), [&](const BasicBlock *Source) {
+               return Source == InnerLoopExit || Source == OuterLoopHeader;
+             });
+           });
   };
 
   const BasicBlock *ExtraPhiBlock = nullptr;
