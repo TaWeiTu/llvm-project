@@ -230,7 +230,7 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
 
   // Returns whether the block `ExitBlock` contains at least one LCSSA Phi node.
   auto ContainsLCSSAPhi = [](const BasicBlock &ExitBlock) {
-    return any_of(ExitBlock.phis(), [&](const PHINode &PN) {
+    return any_of(ExitBlock.phis(), [](const PHINode &PN) {
       return PN.getNumIncomingValues() == 1;
     });
   };
