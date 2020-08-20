@@ -242,8 +242,9 @@ static bool checkLoopsStructure(const Loop &OuterLoop, const Loop &InnerLoop,
   auto IsExtraPhiBlock = [&](const BasicBlock &BB) {
     return BB.getFirstNonPHI() == BB.getTerminator() &&
            all_of(BB.phis(), [&](const PHINode &PN) {
-             return all_of(PN.blocks(), [&](const BasicBlock *Source) {
-               return Source == InnerLoopExit || Source == OuterLoopHeader;
+             return all_of(PN.blocks(), [&](const BasicBlock *IncomingBlock) {
+               return IncomingBlock == InnerLoopExit ||
+                      IncomingBlock == OuterLoopHeader;
              });
            });
   };
