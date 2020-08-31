@@ -399,21 +399,9 @@ public:
 
       // Do not pass deleted Loop into the instrumentation.
       if (Updater.skipCurrentLoop())
-<<<<<<< HEAD
-<<<<<<< HEAD
         PI.runAfterPassInvalidated<Loop>(Pass, PassPA);
       else
         PI.runAfterPass<Loop>(Pass, *L, PassPA);
-=======
-        PI.runAfterPassInvalidated<LoopUnitT>(Pass);
-      else
-        PI.runAfterPass<LoopUnitT>(Pass, LU);
->>>>>>> 4f8dbd6fdd3... Generalize FunctionToLoopPassAdaptor for LoopNest pass
-=======
-        PI.runAfterPassInvalidated<Loop>(Pass);
-      else
-        PI.runAfterPass<Loop>(Pass, *L);
->>>>>>> 7378649b673... Add LoopNest-related infrustructures
 
       // FIXME: We should verify the set of analyses relevant to Loop passes
       // are preserved.

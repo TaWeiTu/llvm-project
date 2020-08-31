@@ -143,7 +143,7 @@ public:
     // pass manager handles all the invalidation at that layer.
     if (PI.runBeforePass<Function>(LoopCanonicalizationFPM, F)) {
       PA = LoopCanonicalizationFPM.run(F, AM);
-      PI.runAfterPass<Function>(LoopCanonicalizationFPM, F);
+      PI.runAfterPass<Function>(LoopCanonicalizationFPM, F, PA);
     }
 
     // Get the loop structure for this function.
@@ -200,9 +200,9 @@ public:
 
       // Do not pass deleted LoopNest into the instrumentation.
       if (Updater.skipCurrentLoopNest())
-        PI.runAfterPassInvalidated<LoopNest>(Pass);
+        PI.runAfterPassInvalidated<LoopNest>(Pass, PassPA);
       else
-        PI.runAfterPass<LoopNest>(Pass, LN);
+        PI.runAfterPass<LoopNest>(Pass, LN, PassPA);
 
       if (!Updater.skipCurrentLoopNest())
         // We know that the loop nest pass couldn't have invalidated any other
@@ -325,9 +325,9 @@ public:
 
       // Do not pass deleted Loop into the instrumentation.
       if (Updater.skipCurrentLoop())
-        PI.runAfterPassInvalidated<Loop>(Pass);
+        PI.runAfterPassInvalidated<Loop>(Pass, PassPA);
       else
-        PI.runAfterPass<Loop>(Pass, *L);
+        PI.runAfterPass<Loop>(Pass, *L, PassPA);
 
       if (!Updater.SkipCurrentLoop)
         // Invalidate the loop analysis results here. Note that even if the loop

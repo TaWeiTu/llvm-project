@@ -42,9 +42,9 @@ PassManager<LoopNest, LoopNestAnalysisManager, LoopStandardAnalysisResults &,
 
     // Do not pass deleted LoopNest into the instrumentation
     if (U.skipCurrentLoopNest())
-      PI.runAfterPassInvalidated<LoopNest>(*Pass);
+      PI.runAfterPassInvalidated<LoopNest>(*Pass, PassPA);
     else
-      PI.runAfterPass<LoopNest>(*Pass, LN);
+      PI.runAfterPass<LoopNest>(*Pass, LN, PassPA);
 
     if (U.skipCurrentLoopNest()) {
       PA.intersect(std::move(PassPA));
