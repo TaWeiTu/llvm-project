@@ -12,11 +12,7 @@
 
 using namespace llvm;
 
-// Explicit template instantiations and specialization defininitions for core
-// template typedefs.
 namespace llvm {
-// template class PassManager<Loop, LoopAnalysisManager,
-//                            LoopStandardAnalysisResults &, LPMUpdater &>;
 
 /// Explicitly specialize the pass manager's run method to handle loop nest
 /// structure updates.
