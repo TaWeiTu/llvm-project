@@ -102,13 +102,13 @@ public:
   // explicit instantiations below. Find away to use the default and remove the
   // duplicated code here.
   PassManager(PassManager &&Arg)
-      : PassIndices(std::move(Arg.PassIndices)),
+      : PassCategories(std::move(Arg.PassCategories)),
         LoopPasses(std::move(Arg.LoopPasses)),
         LoopNestPasses(std::move(Arg.LoopNestPasses)),
         DebugLogging(std::move(Arg.DebugLogging)) {}
 
   PassManager &operator=(PassManager &&RHS) {
-    PassIndices = std::move(RHS.PassIndices);
+    PassCategories = std::move(RHS.PassCategories);
     LoopPasses = std::move(RHS.LoopPasses);
     LoopNestPasses = std::move(RHS.LoopNestPasses);
     DebugLogging = std::move(RHS.DebugLogging);
@@ -123,7 +123,7 @@ public:
     using LoopPassModelT =
         detail::PassModel<Loop, PassT, PreservedAnalyses, LoopAnalysisManager,
                           LoopStandardAnalysisResults &, LPMUpdater &>;
-    PassIndices.push_back(LoopPasses.size() << 1);
+    PassCategories.push_back(false);
     LoopPasses.emplace_back(new LoopPassModelT(std::move(Pass)));
   }
 
@@ -133,7 +133,7 @@ public:
         detail::PassModel<LoopNest, PassT, PreservedAnalyses,
                           LoopAnalysisManager, LoopStandardAnalysisResults &,
                           LPMUpdater &>;
-    PassIndices.push_back(LoopNestPasses.size() << 1 | 1);
+    PassCategories.push_back(true);
     LoopNestPasses.emplace_back(new LoopNestPassModelT(std::move(Pass)));
   }
 
@@ -147,7 +147,7 @@ public:
         detail::PassModel<Loop, RepeatedPass<PassT>, PreservedAnalyses,
                           LoopAnalysisManager, LoopStandardAnalysisResults &,
                           LPMUpdater &>;
-    PassIndices.push_back(LoopPasses.size() << 1);
+    PassCategories.push_back(false);
     LoopPasses.emplace_back(new RepeatedLoopPassModelT(std::move(Pass)));
   }
 
@@ -158,7 +158,7 @@ public:
         detail::PassModel<LoopNest, RepeatedPass<PassT>, PreservedAnalyses,
                           LoopAnalysisManager, LoopStandardAnalysisResults &,
                           LPMUpdater &>;
-    PassIndices.push_back(LoopNestPasses.size() << 1 | 1);
+    PassCategories.push_back(true);
     LoopNestPasses.emplace_back(
         new RepeatedLoopNestPassModelT(std::move(Pass)));
   }
@@ -173,7 +173,7 @@ protected:
       detail::PassConcept<LoopNest, LoopAnalysisManager,
                           LoopStandardAnalysisResults &, LPMUpdater &>;
 
-  std::vector<size_t> PassIndices;
+  BitVector PassCategories;
   std::vector<std::unique_ptr<LoopPassConceptT>> LoopPasses;
   std::vector<std::unique_ptr<LoopNestPassConceptT>> LoopNestPasses;
 

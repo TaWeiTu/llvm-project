@@ -53,16 +53,26 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
                                        LPMUpdater &U) {
   PreservedAnalyses PA = PreservedAnalyses::all();
   PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
-  std::unique_ptr<LoopNest> LN = LoopNest::getLoopNest(L, AR.SE);
+  
+  unsigned LoopPassIndex = 0, LoopNestPassIndex = 0;
+  std::unique_ptr<LoopNest> LoopNestPtr;
+  bool IsLoopNestPtrValid = false;
 
-  for (size_t Index : PassIndices) {
+  for (size_t I = 0, E = PassCategories.size(); I != E; ++I) {
     Optional<PreservedAnalyses> PassPA;
-    if (Index & 1) {
-      auto &Pass = LoopNestPasses[Index >> 1];
-      PassPA = runSinglePass(*LN, Pass, AM, AR, U, PI);
-    } else {
-      auto &Pass = LoopPasses[Index >> 1];
+    if (!PassCategories.test(I)) {
+      auto &Pass = LoopPasses[LoopPassIndex++];
       PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
+    } else {
+      auto &Pass = LoopNestPasses[LoopNestPassIndex++];
+
+      // If the loop-nest object calculated before is no longer valid,
+      // re-calculate it here before running the loop-nest pass.
+      if (!IsLoopNestPtrValid) {
+        LoopNestPtr = LoopNest::getLoopNest(L, AR.SE);
+        IsLoopNestPtrValid = true;
+      }
+      PassPA = runSinglePass(*LoopNestPtr, Pass, AM, AR, U, PI);
     }
 
     if (!PassPA)
@@ -81,6 +91,9 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
     // Finally, we intersect the final preserved analyses to compute the
     // aggregate preserved set for this pass manager.
     PA.intersect(std::move(*PassPA));
+
+    // Check if the current pass preserved the loop-nest object or not.
+    IsLoopNestPtrValid = PassPA->getChecker<LoopNestAnalysis>().preserved();
 
     // FIXME: Historically, the pass managers all called the LLVM context's
     // yield function here. We don't have a generic way to acquire the
