@@ -25,7 +25,6 @@ PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
   if (DebugLogging)
     dbgs() << "Starting Loop pass manager run.\n";
 
-  assert(LoopNestPasses.empty());
   // Request PassInstrumentation from analysis manager, will use it to run
   // instrumenting callbacks for the passes later.
   if (!L.getParentLoop() && !LoopNestPasses.empty())
