@@ -15,62 +15,27 @@ using namespace llvm;
 // Explicit template instantiations and specialization defininitions for core
 // template typedefs.
 namespace llvm {
-template class PassManager<Loop, LoopAnalysisManager,
-                           LoopStandardAnalysisResults &, LPMUpdater &>;
+// template class PassManager<Loop, LoopAnalysisManager,
+//                            LoopStandardAnalysisResults &, LPMUpdater &>;
 
 /// Explicitly specialize the pass manager's run method to handle loop nest
 /// structure updates.
-template <>
 PreservedAnalyses
 PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
             LPMUpdater &>::run(Loop &L, LoopAnalysisManager &AM,
                                LoopStandardAnalysisResults &AR, LPMUpdater &U) {
-  PreservedAnalyses PA = PreservedAnalyses::all();
+  PreservedAnalyses PA;
 
   if (DebugLogging)
     dbgs() << "Starting Loop pass manager run.\n";
 
+  assert(LoopNestPasses.empty());
   // Request PassInstrumentation from analysis manager, will use it to run
   // instrumenting callbacks for the passes later.
-  PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
-  for (auto &Pass : Passes) {
-    // Check the PassInstrumentation's BeforePass callbacks before running the
-    // pass, skip its execution completely if asked to (callback returns false).
-    if (!PI.runBeforePass<Loop>(*Pass, L))
-      continue;
-
-    PreservedAnalyses PassPA;
-    {
-      TimeTraceScope TimeScope(Pass->name(), L.getName());
-      PassPA = Pass->run(L, AM, AR, U);
-    }
-
-    // do not pass deleted Loop into the instrumentation
-    if (U.skipCurrentLoop())
-      PI.runAfterPassInvalidated<Loop>(*Pass, PassPA);
-    else
-      PI.runAfterPass<Loop>(*Pass, L, PassPA);
-
-    // If the loop was deleted, abort the run and return to the outer walk.
-    if (U.skipCurrentLoop()) {
-      PA.intersect(std::move(PassPA));
-      break;
-    }
-
-    // Update the analysis manager as each pass runs and potentially
-    // invalidates analyses.
-    AM.invalidate(L, PassPA);
-
-    // Finally, we intersect the final preserved analyses to compute the
-    // aggregate preserved set for this pass manager.
-    PA.intersect(std::move(PassPA));
-
-    // FIXME: Historically, the pass managers all called the LLVM context's
-    // yield function here. We don't have a generic way to acquire the
-    // context and it isn't yet clear what the right pattern is for yielding
-    // in the new pass manager so it is currently omitted.
-    // ...getContext().yield();
-  }
+  if (!L.getParentLoop() && !LoopNestPasses.empty())
+    PA = runWithLoopNestPasses(L, AM, AR, U);
+  else
+    PA = runWithoutLoopNestPasses(L, AM, AR, U);
 
   // Invalidation for the current loop should be handled above, and other loop
   // analysis results shouldn't be impacted by runs over this loop. Therefore,
@@ -86,7 +51,85 @@ PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
 
   return PA;
 }
+
+PreservedAnalyses
+LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
+                                       LoopStandardAnalysisResults &AR,
+                                       LPMUpdater &U) {
+  PreservedAnalyses PA = PreservedAnalyses::all();
+  PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
+  std::unique_ptr<LoopNest> LN = LoopNest::getLoopNest(L, AR.SE);
+
+  for (size_t Index : PassIndices) {
+    Optional<PreservedAnalyses> PassPA;
+    if (Index & 1) {
+      auto &Pass = LoopNestPasses[Index >> 1];
+      PassPA = runSinglePass(*LN, Pass, AM, AR, U, PI);
+    } else {
+      auto &Pass = LoopPasses[Index >> 1];
+      PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
+    }
+
+    if (!PassPA)
+      continue;
+
+    // If the loop was deleted, abort the run and return to the outer walk.
+    if (U.skipCurrentLoop()) {
+      PA.intersect(std::move(*PassPA));
+      break;
+    }
+
+    // Update the analysis manager as each pass runs and potentially
+    // invalidates analyses.
+    AM.invalidate(L, *PassPA);
+
+    // Finally, we intersect the final preserved analyses to compute the
+    // aggregate preserved set for this pass manager.
+    PA.intersect(std::move(*PassPA));
+
+    // FIXME: Historically, the pass managers all called the LLVM context's
+    // yield function here. We don't have a generic way to acquire the
+    // context and it isn't yet clear what the right pattern is for yielding
+    // in the new pass manager so it is currently omitted.
+    // ...getContext().yield();
+  }
+  return PA;
 }
+
+PreservedAnalyses
+LoopPassManager::runWithoutLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
+                                          LoopStandardAnalysisResults &AR,
+                                          LPMUpdater &U) {
+  PreservedAnalyses PA = PreservedAnalyses::all();
+  PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
+  for (auto &Pass : LoopPasses) {
+    auto PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
+    if (!PassPA)
+      continue;
+
+    // If the loop was deleted, abort the run and return to the outer walk.
+    if (U.skipCurrentLoop()) {
+      PA.intersect(std::move(*PassPA));
+      break;
+    }
+
+    // Update the analysis manager as each pass runs and potentially
+    // invalidates analyses.
+    AM.invalidate(L, *PassPA);
+
+    // Finally, we intersect the final preserved analyses to compute the
+    // aggregate preserved set for this pass manager.
+    PA.intersect(std::move(*PassPA));
+
+    // FIXME: Historically, the pass managers all called the LLVM context's
+    // yield function here. We don't have a generic way to acquire the
+    // context and it isn't yet clear what the right pattern is for yielding
+    // in the new pass manager so it is currently omitted.
+    // ...getContext().yield();
+  }
+  return PA;
+}
+} // namespace llvm
 
 PrintLoopPass::PrintLoopPass() : OS(dbgs()) {}
 PrintLoopPass::PrintLoopPass(raw_ostream &OS, const std::string &Banner)
