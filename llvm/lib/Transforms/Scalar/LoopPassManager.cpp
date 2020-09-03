@@ -53,7 +53,7 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
                                        LPMUpdater &U) {
   PreservedAnalyses PA = PreservedAnalyses::all();
   PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
-  
+
   unsigned LoopPassIndex = 0, LoopNestPassIndex = 0;
   std::unique_ptr<LoopNest> LoopNestPtr;
   bool IsLoopNestPtrValid = false;
@@ -93,7 +93,7 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
     PA.intersect(std::move(*PassPA));
 
     // Check if the current pass preserved the loop-nest object or not.
-    IsLoopNestPtrValid = PassPA->getChecker<LoopNestAnalysis>().preserved();
+    IsLoopNestPtrValid &= PassPA->getChecker<LoopNestAnalysis>().preserved();
 
     // FIXME: Historically, the pass managers all called the LLVM context's
     // yield function here. We don't have a generic way to acquire the
