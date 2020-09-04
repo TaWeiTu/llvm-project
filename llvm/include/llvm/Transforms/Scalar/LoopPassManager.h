@@ -173,6 +173,8 @@ protected:
       detail::PassConcept<LoopNest, LoopAnalysisManager,
                           LoopStandardAnalysisResults &, LPMUpdater &>;
 
+  // BitVector that identifies whether the passes are loop passes or loop-nest
+  // passes (true for loop-nest passes).
   BitVector PassCategories;
   std::vector<std::unique_ptr<LoopPassConceptT>> LoopPasses;
   std::vector<std::unique_ptr<LoopNestPassConceptT>> LoopNestPasses;
@@ -180,6 +182,9 @@ protected:
   /// Flag indicating whether we should do debug logging.
   bool DebugLogging;
 
+  /// Run either a loop pass or a loop-nest pass. Returns `None` if
+  /// PassInstrumentation's `BeforePass returns false. Otherwise, returns the
+  /// preserved analyses of the pass.
   template <typename IRUnitT, typename PassT>
   Optional<PreservedAnalyses>
   runSinglePass(IRUnitT &IR, PassT &Pass, LoopAnalysisManager &AM,

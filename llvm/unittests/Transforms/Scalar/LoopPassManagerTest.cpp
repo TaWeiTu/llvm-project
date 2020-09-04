@@ -1628,4 +1628,4 @@ TEST_F(LoopPassManagerTest, HandleLoopNestPass) {
   MPM.run(*M, MAM);
 }
 
-}
+} // namespace
