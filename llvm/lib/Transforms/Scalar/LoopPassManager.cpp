@@ -25,8 +25,7 @@ PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
   if (DebugLogging)
     dbgs() << "Starting Loop pass manager run.\n";
 
-  // Request PassInstrumentation from analysis manager, will use it to run
-  // instrumenting callbacks for the passes later.
+  // Runs loop-nest passes only when the current loop is a top-level one.
   if (!L.getParentLoop() && !LoopNestPasses.empty())
     PA = runWithLoopNestPasses(L, AM, AR, U);
   else
@@ -52,6 +51,9 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
                                        LoopStandardAnalysisResults &AR,
                                        LPMUpdater &U) {
   PreservedAnalyses PA = PreservedAnalyses::all();
+
+  // Request PassInstrumentation from analysis manager, will use it to run
+  // instrumenting callbacks for the passes later.
   PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
 
   unsigned LoopPassIndex = 0, LoopNestPassIndex = 0;
@@ -109,6 +111,9 @@ LoopPassManager::runWithoutLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
                                           LoopStandardAnalysisResults &AR,
                                           LPMUpdater &U) {
   PreservedAnalyses PA = PreservedAnalyses::all();
+
+  // Request PassInstrumentation from analysis manager, will use it to run
+  // instrumenting callbacks for the passes later.
   PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
   for (auto &Pass : LoopPasses) {
     auto PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
