@@ -63,7 +63,7 @@ namespace llvm {
 // Forward declarations of an update tracking API used in the pass manager.
 class LPMUpdater;
 
-namespace detail {
+namespace {
 
 // SFINAE helper class that distinguish loop passes and loop-nest passes.
 template <typename PassT, typename SFINAE = void>
@@ -79,7 +79,7 @@ struct IsLoopPass<
             std::declval<LoopStandardAnalysisResults &>(),
             std::declval<LPMUpdater &>()))>::value>> : std::true_type {};
 
-} // namespace detail
+} // namespace
 
 // Explicit specialization and instantiation declarations for the pass manager.
 // See the comments on the definition of the specialization for details on how
@@ -102,13 +102,13 @@ public:
   // explicit instantiations below. Find away to use the default and remove the
   // duplicated code here.
   PassManager(PassManager &&Arg)
-      : PassCategories(std::move(Arg.PassCategories)),
+      : IsLoopNestPass(std::move(Arg.IsLoopNestPass)),
         LoopPasses(std::move(Arg.LoopPasses)),
         LoopNestPasses(std::move(Arg.LoopNestPasses)),
         DebugLogging(std::move(Arg.DebugLogging)) {}
 
   PassManager &operator=(PassManager &&RHS) {
-    PassCategories = std::move(RHS.PassCategories);
+    IsLoopNestPass = std::move(RHS.IsLoopNestPass);
     LoopPasses = std::move(RHS.LoopPasses);
     LoopNestPasses = std::move(RHS.LoopNestPasses);
     DebugLogging = std::move(RHS.DebugLogging);
@@ -119,21 +119,21 @@ public:
                         LoopStandardAnalysisResults &AR, LPMUpdater &U);
 
   template <typename PassT>
-  std::enable_if_t<detail::IsLoopPass<PassT>::value> addPass(PassT Pass) {
+  std::enable_if_t<IsLoopPass<PassT>::value> addPass(PassT Pass) {
     using LoopPassModelT =
         detail::PassModel<Loop, PassT, PreservedAnalyses, LoopAnalysisManager,
                           LoopStandardAnalysisResults &, LPMUpdater &>;
-    PassCategories.push_back(false);
+    IsLoopNestPass.push_back(false);
     LoopPasses.emplace_back(new LoopPassModelT(std::move(Pass)));
   }
 
   template <typename PassT>
-  std::enable_if_t<!detail::IsLoopPass<PassT>::value> addPass(PassT Pass) {
+  std::enable_if_t<!IsLoopPass<PassT>::value> addPass(PassT Pass) {
     using LoopNestPassModelT =
         detail::PassModel<LoopNest, PassT, PreservedAnalyses,
                           LoopAnalysisManager, LoopStandardAnalysisResults &,
                           LPMUpdater &>;
-    PassCategories.push_back(true);
+    IsLoopNestPass.push_back(true);
     LoopNestPasses.emplace_back(new LoopNestPassModelT(std::move(Pass)));
   }
 
@@ -141,24 +141,23 @@ public:
   // `RepeatedPass` has a templated `run` method that will result in incorrect
   // behavior of `IsLoopNestPass`.
   template <typename PassT>
-  std::enable_if_t<detail::IsLoopPass<PassT>::value>
-  addPass(RepeatedPass<PassT> Pass) {
+  std::enable_if_t<IsLoopPass<PassT>::value> addPass(RepeatedPass<PassT> Pass) {
     using RepeatedLoopPassModelT =
         detail::PassModel<Loop, RepeatedPass<PassT>, PreservedAnalyses,
                           LoopAnalysisManager, LoopStandardAnalysisResults &,
                           LPMUpdater &>;
-    PassCategories.push_back(false);
+    IsLoopNestPass.push_back(false);
     LoopPasses.emplace_back(new RepeatedLoopPassModelT(std::move(Pass)));
   }
 
   template <typename PassT>
-  std::enable_if_t<!detail::IsLoopPass<PassT>::value>
+  std::enable_if_t<!IsLoopPass<PassT>::value>
   addPass(RepeatedPass<PassT> Pass) {
     using RepeatedLoopNestPassModelT =
         detail::PassModel<LoopNest, RepeatedPass<PassT>, PreservedAnalyses,
                           LoopAnalysisManager, LoopStandardAnalysisResults &,
                           LPMUpdater &>;
-    PassCategories.push_back(true);
+    IsLoopNestPass.push_back(true);
     LoopNestPasses.emplace_back(
         new RepeatedLoopNestPassModelT(std::move(Pass)));
   }
@@ -175,7 +174,7 @@ protected:
 
   // BitVector that identifies whether the passes are loop passes or loop-nest
   // passes (true for loop-nest passes).
-  BitVector PassCategories;
+  BitVector IsLoopNestPass;
   std::vector<std::unique_ptr<LoopPassConceptT>> LoopPasses;
   std::vector<std::unique_ptr<LoopNestPassConceptT>> LoopNestPasses;
 
