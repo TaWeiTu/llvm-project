@@ -63,24 +63,6 @@ namespace llvm {
 // Forward declarations of an update tracking API used in the pass manager.
 class LPMUpdater;
 
-namespace {
-
-// SFINAE helper class that distinguish loop passes and loop-nest passes.
-template <typename PassT, typename SFINAE = void>
-struct IsLoopPass : std::false_type {};
-
-template <typename PassT>
-struct IsLoopPass<
-    PassT,
-    std::enable_if_t<std::is_same<
-        PreservedAnalyses,
-        decltype(std::declval<PassT>().run(
-            std::declval<Loop &>(), std::declval<LoopAnalysisManager &>(),
-            std::declval<LoopStandardAnalysisResults &>(),
-            std::declval<LPMUpdater &>()))>::value>> : std::true_type {};
-
-} // namespace
-
 // Explicit specialization and instantiation declarations for the pass manager.
 // See the comments on the definition of the specialization for details on how
 // it differs from the primary template.
@@ -90,6 +72,13 @@ class PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
     : public PassInfoMixin<
           PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
                       LPMUpdater &>> {
+private:
+  template <typename PassT>
+  using HasRunOnLoopT = decltype(std::declval<PassT>().run(
+      std::declval<Loop &>(), std::declval<LoopAnalysisManager &>(),
+      std::declval<LoopStandardAnalysisResults &>(),
+      std::declval<LPMUpdater &>()));
+
 public:
   /// Construct a pass manager.
   ///
@@ -119,7 +108,8 @@ public:
                         LoopStandardAnalysisResults &AR, LPMUpdater &U);
 
   template <typename PassT>
-  std::enable_if_t<IsLoopPass<PassT>::value> addPass(PassT Pass) {
+  std::enable_if_t<is_detected<HasRunOnLoopT, PassT>::value>
+  addPass(PassT Pass) {
     using LoopPassModelT =
         detail::PassModel<Loop, PassT, PreservedAnalyses, LoopAnalysisManager,
                           LoopStandardAnalysisResults &, LPMUpdater &>;
@@ -128,7 +118,8 @@ public:
   }
 
   template <typename PassT>
-  std::enable_if_t<!IsLoopPass<PassT>::value> addPass(PassT Pass) {
+  std::enable_if_t<!is_detected<HasRunOnLoopT, PassT>::value>
+  addPass(PassT Pass) {
     using LoopNestPassModelT =
         detail::PassModel<LoopNest, PassT, PreservedAnalyses,
                           LoopAnalysisManager, LoopStandardAnalysisResults &,
@@ -141,7 +132,8 @@ public:
   // `RepeatedPass` has a templated `run` method that will result in incorrect
   // behavior of `IsLoopNestPass`.
   template <typename PassT>
-  std::enable_if_t<IsLoopPass<PassT>::value> addPass(RepeatedPass<PassT> Pass) {
+  std::enable_if_t<is_detected<HasRunOnLoopT, PassT>::value>
+  addPass(RepeatedPass<PassT> Pass) {
     using RepeatedLoopPassModelT =
         detail::PassModel<Loop, RepeatedPass<PassT>, PreservedAnalyses,
                           LoopAnalysisManager, LoopStandardAnalysisResults &,
@@ -151,7 +143,7 @@ public:
   }
 
   template <typename PassT>
-  std::enable_if_t<!IsLoopPass<PassT>::value>
+  std::enable_if_t<!is_detected<HasRunOnLoopT, PassT>::value>
   addPass(RepeatedPass<PassT> Pass) {
     using RepeatedLoopNestPassModelT =
         detail::PassModel<LoopNest, RepeatedPass<PassT>, PreservedAnalyses,
