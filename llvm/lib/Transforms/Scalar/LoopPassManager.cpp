@@ -20,16 +20,14 @@ PreservedAnalyses
 PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
             LPMUpdater &>::run(Loop &L, LoopAnalysisManager &AM,
                                LoopStandardAnalysisResults &AR, LPMUpdater &U) {
-  PreservedAnalyses PA;
 
   if (DebugLogging)
     dbgs() << "Starting Loop pass manager run.\n";
 
   // Runs loop-nest passes only when the current loop is a top-level one.
-  if (!L.getParentLoop() && !LoopNestPasses.empty())
-    PA = runWithLoopNestPasses(L, AM, AR, U);
-  else
-    PA = runWithoutLoopNestPasses(L, AM, AR, U);
+  PreservedAnalyses PA = (!L.getParentLoop() && !LoopNestPasses.empty())
+                             ? runWithLoopNestPasses(L, AM, AR, U)
+                             : runWithoutLoopNestPasses(L, AM, AR, U);
 
   // Invalidation for the current loop should be handled above, and other loop
   // analysis results shouldn't be impacted by runs over this loop. Therefore,
@@ -50,6 +48,8 @@ PreservedAnalyses
 LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
                                        LoopStandardAnalysisResults &AR,
                                        LPMUpdater &U) {
+  assert(!L.getParentLoop() &&
+         "Loop-nest passes should only run on top-level loops.");
   PreservedAnalyses PA = PreservedAnalyses::all();
 
   // Request PassInstrumentation from analysis manager, will use it to run
@@ -60,9 +60,9 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
   std::unique_ptr<LoopNest> LoopNestPtr;
   bool IsLoopNestPtrValid = false;
 
-  for (size_t I = 0, E = PassCategories.size(); I != E; ++I) {
+  for (size_t I = 0, E = IsLoopNestPass.size(); I != E; ++I) {
     Optional<PreservedAnalyses> PassPA;
-    if (!PassCategories.test(I)) {
+    if (!IsLoopNestPass[I]) {
       auto &Pass = LoopPasses[LoopPassIndex++];
       PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
     } else {
@@ -116,7 +116,7 @@ LoopPassManager::runWithoutLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
   // instrumenting callbacks for the passes later.
   PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
   for (auto &Pass : LoopPasses) {
-    auto PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
+    Optional<PreservedAnalyses> PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
     if (!PassPA)
       continue;
 
