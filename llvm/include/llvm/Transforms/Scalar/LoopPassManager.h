@@ -88,7 +88,7 @@ public:
 
   // FIXME: These are equivalent to the default move constructor/move
   // assignment. However, using = default triggers linker errors due to the
-  // explicit instantiations below. Find away to use the default and remove the
+  // explicit instantiations below. Find a way to use the default and remove the
   // duplicated code here.
   PassManager(PassManager &&Arg)
       : IsLoopNestPass(std::move(Arg.IsLoopNestPass)),
@@ -174,7 +174,7 @@ protected:
   bool DebugLogging;
 
   /// Run either a loop pass or a loop-nest pass. Returns `None` if
-  /// PassInstrumentation's `BeforePass returns false. Otherwise, returns the
+  /// PassInstrumentation's BeforePass returns false. Otherwise, returns the
   /// preserved analyses of the pass.
   template <typename IRUnitT, typename PassT>
   Optional<PreservedAnalyses>
@@ -447,8 +447,10 @@ public:
     PI.pushBeforeNonSkippedPassCallback([&LAR, &LI](StringRef PassID, Any IR) {
       if (isSpecialPass(PassID, {"PassManager"}))
         return;
-      assert(any_isa<const Loop *>(IR));
-      const Loop *L = any_cast<const Loop *>(IR);
+      assert(any_isa<const Loop *>(IR) || any_isa<const LoopNest *>(IR));
+      const Loop *L = any_isa<const Loop *>(IR)
+                          ? any_cast<const Loop *>(IR)
+                          : &any_cast<const LoopNest *>(IR)->getOutermostLoop();
       assert(L && "Loop should be valid for printing");
 
       // Verify the loop structure and LCSSA form before visiting the loop.
