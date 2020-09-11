@@ -63,6 +63,16 @@ namespace llvm {
 // Forward declarations of an update tracking API used in the pass manager.
 class LPMUpdater;
 
+namespace {
+
+template <typename PassT>
+using HasRunOnLoopT = decltype(std::declval<PassT>().run(
+    std::declval<Loop &>(), std::declval<LoopAnalysisManager &>(),
+    std::declval<LoopStandardAnalysisResults &>(),
+    std::declval<LPMUpdater &>()));
+
+} // namespace
+
 // Explicit specialization and instantiation declarations for the pass manager.
 // See the comments on the definition of the specialization for details on how
 // it differs from the primary template.
@@ -72,13 +82,6 @@ class PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
     : public PassInfoMixin<
           PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
                       LPMUpdater &>> {
-private:
-  template <typename PassT>
-  using HasRunOnLoopT = decltype(std::declval<PassT>().run(
-      std::declval<Loop &>(), std::declval<LoopAnalysisManager &>(),
-      std::declval<LoopStandardAnalysisResults &>(),
-      std::declval<LPMUpdater &>()));
-
 public:
   /// Construct a pass manager.
   ///
@@ -155,6 +158,9 @@ public:
   }
 
   static bool isRequired() { return true; }
+
+  size_t getNumLoopPasses() const { return LoopPasses.size(); }
+  size_t getNumLoopNestPasses() const { return LoopNestPasses.size(); }
 
 protected:
   using LoopPassConceptT =
@@ -250,6 +256,8 @@ public:
   /// state, this routine will mark that the current loop should be skipped by
   /// the rest of the pass management infrastructure.
   void markLoopAsDeleted(Loop &L, llvm::StringRef Name) {
+    assert(!(LoopNestMode && L.getParentLoop()) &&
+           "L should be a top-level loop in loop-nest mode.");
     LAM.clear(L, Name);
     assert((&L == CurrentL || CurrentL->contains(&L)) &&
            "Cannot delete a loop outside of the "
@@ -265,6 +273,8 @@ public:
   /// loops within them will be visited in postorder as usual for the loop pass
   /// manager.
   void addChildLoops(ArrayRef<Loop *> NewChildLoops) {
+    assert(!LoopNestMode &&
+           "Child loops should not be pushed in loop-nest mode.");
     // Insert ourselves back into the worklist first, as this loop should be
     // revisited after all the children have been processed.
     Worklist.insert(CurrentL);
@@ -296,7 +306,10 @@ public:
              "All of the new loops must be siblings of the current loop!");
 #endif
 
-    appendLoopsToWorklist(NewSibLoops, Worklist);
+    if (LoopNestMode)
+      Worklist.insert(NewSibLoops);
+    else
+      appendLoopsToWorklist(NewSibLoops, Worklist);
 
     // No need to skip the current loop or revisit it, as sibling loops
     // shouldn't impact anything.
@@ -326,6 +339,7 @@ private:
 
   Loop *CurrentL;
   bool SkipCurrentLoop;
+  const bool LoopNestMode;
 
 #ifndef NDEBUG
   // In debug builds we also track the parent loop to implement asserts even in
@@ -334,8 +348,8 @@ private:
 #endif
 
   LPMUpdater(SmallPriorityWorklist<Loop *, 4> &Worklist,
-             LoopAnalysisManager &LAM)
-      : Worklist(Worklist), LAM(LAM) {}
+             LoopAnalysisManager &LAM, bool LoopNestMode = false)
+      : Worklist(Worklist), LAM(LAM), LoopNestMode(LoopNestMode) {}
 };
 
 template <typename IRUnitT, typename PassT>
@@ -374,10 +388,12 @@ class FunctionToLoopPassAdaptor
 public:
   explicit FunctionToLoopPassAdaptor(LoopPassT Pass, bool UseMemorySSA = false,
                                      bool UseBlockFrequencyInfo = false,
-                                     bool DebugLogging = false)
+                                     bool DebugLogging = false,
+                                     bool LoopNestMode = false)
       : Pass(std::move(Pass)), LoopCanonicalizationFPM(DebugLogging),
         UseMemorySSA(UseMemorySSA),
-        UseBlockFrequencyInfo(UseBlockFrequencyInfo) {
+        UseBlockFrequencyInfo(UseBlockFrequencyInfo),
+        LoopNestMode(LoopNestMode) {
     LoopCanonicalizationFPM.addPass(LoopSimplifyPass());
     LoopCanonicalizationFPM.addPass(LCSSAPass());
   }
@@ -437,11 +453,16 @@ public:
 
     // Register the worklist and loop analysis manager so that loop passes can
     // update them when they mutate the loop nest structure.
-    LPMUpdater Updater(Worklist, LAM);
+    LPMUpdater Updater(Worklist, LAM, LoopNestMode);
 
     // Add the loop nests in the reverse order of LoopInfo. See method
     // declaration.
-    appendLoopsToWorklist(LI, Worklist);
+    if (!LoopNestMode) {
+      appendLoopsToWorklist(LI, Worklist);
+    } else {
+      for (Loop *L : LI)
+        Worklist.insert(L);
+    }
 
 #ifndef NDEBUG
     PI.pushBeforeNonSkippedPassCallback([&LAR, &LI](StringRef PassID, Any IR) {
@@ -462,6 +483,8 @@ public:
 
     do {
       Loop *L = Worklist.pop_back_val();
+      assert(!(LoopNestMode && L->getParentLoop()) &&
+             "L should be a top-level loop in loop-nest mode.");
 
       // Reset the update structure for this loop.
       Updater.CurrentL = L;
@@ -540,17 +563,30 @@ private:
 
   bool UseMemorySSA = false;
   bool UseBlockFrequencyInfo = false;
+  const bool LoopNestMode;
 };
 
 /// A function to deduce a loop pass type and wrap it in the templated
 /// adaptor.
 template <typename LoopPassT>
-FunctionToLoopPassAdaptor<LoopPassT>
+inline FunctionToLoopPassAdaptor<LoopPassT>
 createFunctionToLoopPassAdaptor(LoopPassT Pass, bool UseMemorySSA = false,
                                 bool UseBlockFrequencyInfo = false,
                                 bool DebugLogging = false) {
   return FunctionToLoopPassAdaptor<LoopPassT>(
-      std::move(Pass), UseMemorySSA, UseBlockFrequencyInfo, DebugLogging);
+      std::move(Pass), UseMemorySSA, UseBlockFrequencyInfo, DebugLogging,
+      is_detected<HasRunOnLoopT, LoopPassT>::value);
+}
+
+template <>
+inline FunctionToLoopPassAdaptor<LoopPassManager>
+createFunctionToLoopPassAdaptor<LoopPassManager>(
+    LoopPassManager LPM, bool UseMemorySSA = false,
+    bool UseBlockFrequencyInfo = false, bool DebugLogging = false) {
+  bool LoopNestMode = (LPM.getNumLoopPasses() == 0);
+  return FunctionToLoopPassAdaptor<LoopPassManager>(
+      std::move(LPM), UseMemorySSA, UseBlockFrequencyInfo, DebugLogging,
+      LoopNestMode);
 }
 
 /// Pass for printing a loop's contents as textual IR.
