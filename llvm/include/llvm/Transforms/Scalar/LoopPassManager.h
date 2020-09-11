@@ -556,6 +556,8 @@ public:
 
   static bool isRequired() { return true; }
 
+  bool isLoopNestMode() const { return LoopNestMode; }
+
 private:
   LoopPassT Pass;
 
@@ -569,13 +571,26 @@ private:
 /// A function to deduce a loop pass type and wrap it in the templated
 /// adaptor.
 template <typename LoopPassT>
-inline FunctionToLoopPassAdaptor<LoopPassT>
+inline std::enable_if_t<is_detected<HasRunOnLoopT, LoopPassT>::value,
+                        FunctionToLoopPassAdaptor<LoopPassT>>
 createFunctionToLoopPassAdaptor(LoopPassT Pass, bool UseMemorySSA = false,
                                 bool UseBlockFrequencyInfo = false,
                                 bool DebugLogging = false) {
   return FunctionToLoopPassAdaptor<LoopPassT>(
       std::move(Pass), UseMemorySSA, UseBlockFrequencyInfo, DebugLogging,
       is_detected<HasRunOnLoopT, LoopPassT>::value);
+}
+
+template <typename LoopNestPassT>
+inline std::enable_if_t<!is_detected<HasRunOnLoopT, LoopNestPassT>::value,
+                        FunctionToLoopPassAdaptor<LoopPassManager>>
+createFunctionToLoopPassAdaptor(LoopNestPassT Pass, bool UseMemorySSA = false,
+                                bool UseBlockFrequencyInfo = false,
+                                bool DebugLogging = false) {
+  LoopPassManager LPM(DebugLogging);
+  LPM.addPass(std::move(Pass));
+  return FunctionToLoopPassAdaptor<LoopPassManager>(
+      std::move(LPM), UseMemorySSA, UseBlockFrequencyInfo, DebugLogging, true);
 }
 
 template <>
