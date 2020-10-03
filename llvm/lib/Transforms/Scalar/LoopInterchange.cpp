@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Transforms/Scalar/LoopInterchange.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -1657,3 +1658,13 @@ INITIALIZE_PASS_END(LoopInterchange, "loop-interchange",
                     "Interchanges loops for cache reuse", false, false)
 
 Pass *llvm::createLoopInterchangePass() { return new LoopInterchange(); }
+
+namespace llvm {
+
+PreservedAnalyses LoopInterchangePass::run(LoopNest &L, LoopAnalysisManager &AM,
+                                           LoopStandardAnalysisResults &AR,
+                                           LPMUpdater &U) {
+  return PreservedAnalyses::all();
+}
+
+} // namespace llvm
