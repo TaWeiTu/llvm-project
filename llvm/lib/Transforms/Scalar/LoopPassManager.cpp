@@ -44,6 +44,7 @@ PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
   return PA;
 }
 
+// Run both loop passes and loop-nest passes on top-level loop \p L.
 PreservedAnalyses
 LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
                                        LoopStandardAnalysisResults &AR,
@@ -57,15 +58,22 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
   PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
 
   unsigned LoopPassIndex = 0, LoopNestPassIndex = 0;
+
+  // `LoopNestPtr` points to the `LoopNest` object for the current top-level
+  // loop and `IsLoopNestPtrValid` indicates whether the pointer is still valid.
+  // The `LoopNest` object will have to be re-constructed if the pointer is
+  // invalid when encountering a loop-nest pass.
   std::unique_ptr<LoopNest> LoopNestPtr;
   bool IsLoopNestPtrValid = false;
 
   for (size_t I = 0, E = IsLoopNestPass.size(); I != E; ++I) {
     Optional<PreservedAnalyses> PassPA;
     if (!IsLoopNestPass[I]) {
+      // The `I`-th pass is a loop pass.
       auto &Pass = LoopPasses[LoopPassIndex++];
       PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
     } else {
+      // The `I`-th pass is a loop-nest pass.
       auto &Pass = LoopNestPasses[LoopNestPassIndex++];
 
       // If the loop-nest object calculated before is no longer valid,
@@ -77,6 +85,9 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
       PassPA = runSinglePass(*LoopNestPtr, Pass, AM, AR, U, PI);
     }
 
+    // `PassPA` is `None` means that the before-pass callbacks in
+    // `PassInstrumentation` return false. The pass does not run in this case,
+    // so we can skip the following procedure.
     if (!PassPA)
       continue;
 
@@ -106,6 +117,9 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
   return PA;
 }
 
+// Run all loop passes on loop \p L. Loop-nest passes don't run either because
+// \p L is not a top-level one or simply because there are no loop-nest passes
+// in the pass manager at all.
 PreservedAnalyses
 LoopPassManager::runWithoutLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
                                           LoopStandardAnalysisResults &AR,
@@ -117,6 +131,10 @@ LoopPassManager::runWithoutLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
   PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
   for (auto &Pass : LoopPasses) {
     Optional<PreservedAnalyses> PassPA = runSinglePass(L, Pass, AM, AR, U, PI);
+
+    // `PassPA` is `None` means that the before-pass callbacks in
+    // `PassInstrumentation` return false. The pass does not run in this case,
+    // so we can skip the following procedure.
     if (!PassPA)
       continue;
 

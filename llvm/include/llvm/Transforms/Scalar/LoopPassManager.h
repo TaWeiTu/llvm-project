@@ -107,6 +107,12 @@ public:
   PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
                         LoopStandardAnalysisResults &AR, LPMUpdater &U);
 
+  /// Add either a loop pass or a loop-nest pass to the pass manager. Append \p
+  /// Pass to the list of loop passes if it has a dedicated \fn run() method for
+  /// loops and to the list of loop-nest passes if the \fn run() method is for
+  /// loop-nests instead. Also append whether \p Pass is loop-nest pass or not
+  /// to the end of \var IsLoopNestPass so we can easily identify the types of
+  /// passes in the pass manager later.
   template <typename PassT>
   std::enable_if_t<is_detected<HasRunOnLoopT, PassT>::value>
   addPass(PassT Pass) {
@@ -130,7 +136,7 @@ public:
 
   // Specializations of `addPass` for `RepeatedPass`. These are necessary since
   // `RepeatedPass` has a templated `run` method that will result in incorrect
-  // behavior of `IsLoopNestPass`.
+  // detection of `HasRunOnLoopT`.
   template <typename PassT>
   std::enable_if_t<is_detected<HasRunOnLoopT, PassT>::value>
   addPass(RepeatedPass<PassT> Pass) {
