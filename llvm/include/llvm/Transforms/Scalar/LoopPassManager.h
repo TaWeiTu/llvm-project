@@ -250,7 +250,7 @@ class FunctionToLoopPassAdaptor;
 /// and when new loops are added to the pipeline, their subloops are also
 /// inserted recursively. On the other hand, in loop-nest mode, only top-level
 /// loops are contained in the worklist and the addition of new (top-level)
-/// loops will no trigger the addition of their subloops.
+/// loops will not trigger the addition of their subloops.
 class LPMUpdater {
 public:
   /// This can be queried by loop passes which run other loop passes (like pass
@@ -272,7 +272,7 @@ public:
   /// state, this routine will mark that the current loop should be skipped by
   /// the rest of the pass management infrastructure.
   void markLoopAsDeleted(Loop &L, llvm::StringRef Name) {
-    assert(!(LoopNestMode && L.getParentLoop()) &&
+    assert((!LoopNestMode || !L.getParentLoop()) &&
            "L should be a top-level loop in loop-nest mode.");
     LAM.clear(L, Name);
     assert((&L == CurrentL || CurrentL->contains(&L)) &&
