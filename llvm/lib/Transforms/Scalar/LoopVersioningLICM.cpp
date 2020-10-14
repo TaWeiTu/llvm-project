@@ -59,6 +59,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Transforms/Scalar/LoopVersioningLICM.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -85,6 +86,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/LoopVersioning.h"
@@ -114,16 +116,17 @@ static cl::opt<unsigned> LVLoopDepthThreshold(
 
 namespace {
 
-struct LoopVersioningLICM : public LoopPass {
+struct LoopVersioningLICMLegacyPass : public LoopPass {
   static char ID;
 
-  LoopVersioningLICM()
-      : LoopPass(ID), LoopDepthThreshold(LVLoopDepthThreshold),
-        InvariantThreshold(LVInvarThreshold) {
-    initializeLoopVersioningLICMPass(*PassRegistry::getPassRegistry());
+  LoopVersioningLICMLegacyPass() : LoopPass(ID) {
+    initializeLoopVersioningLICMLegacyPassPass(
+        *PassRegistry::getPassRegistry());
   }
 
   bool runOnLoop(Loop *L, LPPassManager &LPM) override;
+
+  StringRef getPassName() const override { return "Loop Versioning for LICM"; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -138,8 +141,16 @@ struct LoopVersioningLICM : public LoopPass {
     AU.addPreserved<GlobalsAAWrapperPass>();
     AU.addRequired<OptimizationRemarkEmitterWrapperPass>();
   }
+};
 
-  StringRef getPassName() const override { return "Loop Versioning for LICM"; }
+struct LoopVersioningLICM {
+  LoopVersioningLICM(AliasAnalysis *AA, ScalarEvolution *SE,
+                     LoopAccessLegacyAnalysis *LAA, LoopAccessInfo *LAI,
+                     OptimizationRemarkEmitter *ORE)
+      : AA(AA), SE(SE), LAA(LAA), LAI(LAI), LoopDepthThreshold(LVLoopDepthThreshold),
+        InvariantThreshold(LVInvarThreshold), ORE(ORE) {}
+
+  bool runOnLoop(Loop *L, LoopInfo *LI, DominatorTree *DT);
 
   void reset() {
     AA = nullptr;
@@ -401,7 +412,8 @@ bool LoopVersioningLICM::legalLoopInstructions() {
       }
     }
   // Get LoopAccessInfo from current loop.
-  LAI = &LAA->getInfo(CurLoop);
+  if (LAA && !LAI)
+    LAI = &LAA->getInfo(CurLoop);
   // Check LoopAccessInfo for need of runtime check.
   if (LAI->getRuntimePointerChecking()->getChecks().empty()) {
     LLVM_DEBUG(dbgs() << "    LAA: Runtime check not found !!\n");
@@ -562,30 +574,34 @@ void LoopVersioningLICM::setNoAliasToLoop(Loop *VerLoop) {
   }
 }
 
-bool LoopVersioningLICM::runOnLoop(Loop *L, LPPassManager &LPM) {
+bool LoopVersioningLICMLegacyPass::runOnLoop(Loop *L, LPPassManager &LPM) {
+  if (skipLoop(L))
+    return false;
+
+  AliasAnalysis *AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
+  ScalarEvolution *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
+  LoopAccessLegacyAnalysis *LAA = &getAnalysis<LoopAccessLegacyAnalysis>();
+  OptimizationRemarkEmitter *ORE =
+      &getAnalysis<OptimizationRemarkEmitterWrapperPass>().getORE();
+  LoopInfo *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+  DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+  return LoopVersioningLICM(AA, SE, LAA, nullptr, ORE).runOnLoop(L, LI, DT);
+}
+
+bool LoopVersioningLICM::runOnLoop(Loop *L, LoopInfo *LI, DominatorTree *DT) {
   // This will automatically release all resources hold by the current
   // LoopVersioningLICM object.
   AutoResetter Resetter(*this);
-
-  if (skipLoop(L))
-    return false;
 
   // Do not do the transformation if disabled by metadata.
   if (hasLICMVersioningTransformation(L) & TM_Disable)
     return false;
 
-  // Get Analysis information.
-  AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
-  SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-  LAA = &getAnalysis<LoopAccessLegacyAnalysis>();
-  ORE = &getAnalysis<OptimizationRemarkEmitterWrapperPass>().getORE();
-  LAI = nullptr;
   // Set Current Loop
   CurLoop = L;
   CurAST.reset(new AliasSetTracker(*AA));
 
   // Loop over the body of this loop, construct AST.
-  LoopInfo *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
   for (auto *Block : L->getBlocks()) {
     if (LI->getLoopFor(Block) == L) // Ignore blocks in subloop.
       CurAST->add(*Block);          // Incorporate the specified basic block
@@ -600,7 +616,6 @@ bool LoopVersioningLICM::runOnLoop(Loop *L, LPPassManager &LPM) {
     // Do loop versioning.
     // Create memcheck for memory accessed inside loop.
     // Clone original loop, and set blocks properly.
-    DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     LoopVersioning LVer(*LAI, LAI->getRuntimePointerChecking()->getChecks(),
                         CurLoop, LI, DT, SE);
     LVer.versionLoop();
@@ -620,9 +635,9 @@ bool LoopVersioningLICM::runOnLoop(Loop *L, LPPassManager &LPM) {
   return Changed;
 }
 
-char LoopVersioningLICM::ID = 0;
+char LoopVersioningLICMLegacyPass::ID = 0;
 
-INITIALIZE_PASS_BEGIN(LoopVersioningLICM, "loop-versioning-licm",
+INITIALIZE_PASS_BEGIN(LoopVersioningLICMLegacyPass, "loop-versioning-licm",
                       "Loop Versioning For LICM", false, false)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
@@ -633,7 +648,27 @@ INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(OptimizationRemarkEmitterWrapperPass)
-INITIALIZE_PASS_END(LoopVersioningLICM, "loop-versioning-licm",
+INITIALIZE_PASS_END(LoopVersioningLICMLegacyPass, "loop-versioning-licm",
                     "Loop Versioning For LICM", false, false)
 
-Pass *llvm::createLoopVersioningLICMPass() { return new LoopVersioningLICM(); }
+Pass *llvm::createLoopVersioningLICMPass() {
+  return new LoopVersioningLICMLegacyPass();
+}
+
+namespace llvm {
+
+PreservedAnalyses LoopVersioningLICMPass::run(Loop &L, LoopAnalysisManager &AM,
+                                              LoopStandardAnalysisResults &LAR,
+                                              LPMUpdater &U) {
+  AliasAnalysis *AA = &LAR.AA;
+  ScalarEvolution *SE = &LAR.SE;
+  DominatorTree *DT = &LAR.DT;
+  LoopInfo *LI = &LAR.LI;
+  LoopAccessInfo *LAI = &AM.getResult<LoopAccessAnalysis>(L, LAR);
+  const Function *F = L.getHeader()->getParent();
+  OptimizationRemarkEmitter ORE(F);
+  if (!LoopVersioningLICM(AA, SE, nullptr, LAI, &ORE).runOnLoop(&L, LI, DT))
+    return PreservedAnalyses::all();
+  return getLoopPassPreservedAnalyses();
+}
+} // namespace llvm
