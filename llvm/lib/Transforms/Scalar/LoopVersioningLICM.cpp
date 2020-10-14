@@ -147,7 +147,8 @@ struct LoopVersioningLICM {
   LoopVersioningLICM(AliasAnalysis *AA, ScalarEvolution *SE,
                      LoopAccessLegacyAnalysis *LAA, LoopAccessInfo *LAI,
                      OptimizationRemarkEmitter *ORE)
-      : AA(AA), SE(SE), LAA(LAA), LAI(LAI), LoopDepthThreshold(LVLoopDepthThreshold),
+      : AA(AA), SE(SE), LAA(LAA), LAI(LAI),
+        LoopDepthThreshold(LVLoopDepthThreshold),
         InvariantThreshold(LVInvarThreshold), ORE(ORE) {}
 
   bool runOnLoop(Loop *L, LoopInfo *LI, DominatorTree *DT);
