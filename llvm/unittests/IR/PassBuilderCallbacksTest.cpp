@@ -1000,79 +1000,6 @@ TEST_F(LoopCallbacksTest, InstrumentedInvalidatingLoopNestPasses) {
   PM.run(*M, AM);
 }
 
-TEST_F(LoopCallbacksTest, InstrumentedInvalidatingLoopNestPasses) {
-  CallbacksHandle.registerPassInstrumentation();
-  // Non-mock instrumentation not specifically mentioned below can be ignored.
-  CallbacksHandle.ignoreNonMockPassInstrumentation("<string>");
-  CallbacksHandle.ignoreNonMockPassInstrumentation("foo");
-  CallbacksHandle.ignoreNonMockPassInstrumentation("loop");
-
-  EXPECT_CALL(AnalysisHandle, run(HasName("loop"), _, _));
-  EXPECT_CALL(PassHandle, run(HasName("loop"), _, _, _))
-      .WillOnce(WithArgs<0, 1, 2>(Invoke(getAnalysisResult)));
-  EXPECT_CALL(ExtraPassHandle, run(HasName("loop"), _, _, _))
-      .WillOnce(DoAll(Invoke(ExtraPassHandle.invalidateLoopNest),
-                      Invoke([&](LoopNest &, LoopAnalysisManager &,
-                                 LoopStandardAnalysisResults &, LPMUpdater &) {
-                        return PreservedAnalyses::all();
-                      })));
-
-  // PassInstrumentation calls should happen in-sequence, in the same order
-  // as passes/analyses are scheduled.
-  ::testing::Sequence PISequence;
-  EXPECT_CALL(CallbacksHandle,
-              runBeforePass(HasNameRegex("MockPassHandle"), HasName("loop")))
-      .InSequence(PISequence);
-  EXPECT_CALL(
-      CallbacksHandle,
-      runBeforeNonSkippedPass(HasNameRegex("MockPassHandle"), HasName("loop")))
-      .InSequence(PISequence);
-  EXPECT_CALL(
-      CallbacksHandle,
-      runBeforeAnalysis(HasNameRegex("MockAnalysisHandle"), HasName("loop")))
-      .InSequence(PISequence);
-  EXPECT_CALL(
-      CallbacksHandle,
-      runAfterAnalysis(HasNameRegex("MockAnalysisHandle"), HasName("loop")))
-      .InSequence(PISequence);
-  EXPECT_CALL(CallbacksHandle,
-              runAfterPass(HasNameRegex("MockPassHandle"), HasName("loop"), _))
-      .InSequence(PISequence);
-
-  EXPECT_CALL(CallbacksHandle,
-              runBeforePass(HasNameRegex("MockPassHandle<llvm::LoopNest>"),
-                            HasName("loop")))
-      .InSequence(PISequence);
-  EXPECT_CALL(
-      CallbacksHandle,
-      runBeforeNonSkippedPass(HasNameRegex("MockPassHandle<llvm::LoopNest>"),
-                              HasName("loop")))
-      .InSequence(PISequence);
-  EXPECT_CALL(CallbacksHandle,
-              runAfterPassInvalidated(
-                  HasNameRegex("MockPassHandle<llvm::LoopNest>"), _))
-      .InSequence(PISequence);
-
-  EXPECT_CALL(CallbacksHandle,
-              runAfterPassInvalidated(HasNameRegex("^PassManager"), _))
-      .InSequence(PISequence);
-
-  // Our mock pass invalidates IR, thus normal runAfterPass is never called.
-  EXPECT_CALL(
-      CallbacksHandle,
-      runAfterPassInvalidated(HasNameRegex("MockPassHandle<llvm::Loop>"), _))
-      .Times(0);
-  EXPECT_CALL(CallbacksHandle,
-              runAfterPass(HasNameRegex("MockPassHandle<llvm::LoopNest>"),
-                           HasName("loop"), _))
-      .Times(0);
-
-  StringRef PipelineText = "test-transform";
-  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText, true), Succeeded())
-      << "Pipeline was: " << PipelineText;
-  PM.run(*M, AM);
-}
-
 TEST_F(LoopCallbacksTest, InstrumentedSkippedPasses) {
   CallbacksHandle.registerPassInstrumentation();
   // Non-mock instrumentation run here can safely be ignored.
@@ -1087,21 +1014,11 @@ TEST_F(LoopCallbacksTest, InstrumentedSkippedPasses) {
       .WillOnce(Return(false));
 
   EXPECT_CALL(CallbacksHandle,
-<<<<<<< HEAD
               runBeforeSkippedPass(HasNameRegex("MockPassHandle<.*Loop>"),
-=======
-              runBeforePass(HasNameRegex("MockPassHandle<llvm::Loop>"),
-                            HasName("loop")))
-      .WillOnce(Return(false));
-
-  EXPECT_CALL(CallbacksHandle,
-              runBeforeSkippedPass(HasNameRegex("MockPassHandle<llvm::Loop>"),
->>>>>>> 19ab92ca0e1... Add PassInstrumentation test for loop-nest pass
                                    HasName("loop")))
       .Times(1);
 
   EXPECT_CALL(CallbacksHandle,
-<<<<<<< HEAD
               runBeforePass(HasNameRegex("MockPassHandle<.*LoopNest>"),
                             HasName("loop")))
       .WillOnce(Return(false));
@@ -1109,16 +1026,6 @@ TEST_F(LoopCallbacksTest, InstrumentedSkippedPasses) {
   EXPECT_CALL(CallbacksHandle,
               runBeforeSkippedPass(HasNameRegex("MockPassHandle<.*LoopNest>"),
                                    HasName("loop")))
-=======
-              runBeforePass(HasNameRegex("MockPassHandle<llvm::LoopNest>"),
-                            HasName("loop")))
-      .WillOnce(Return(false));
-
-  EXPECT_CALL(
-      CallbacksHandle,
-      runBeforeSkippedPass(HasNameRegex("MockPassHandle<llvm::LoopNest>"),
-                           HasName("loop")))
->>>>>>> 19ab92ca0e1... Add PassInstrumentation test for loop-nest pass
       .Times(1);
 
   EXPECT_CALL(AnalysisHandle, run(HasName("loop"), _, _)).Times(0);
@@ -1127,7 +1034,6 @@ TEST_F(LoopCallbacksTest, InstrumentedSkippedPasses) {
 
   // As the pass is skipped there is no afterPass, beforeAnalysis/afterAnalysis
   // as well.
-<<<<<<< HEAD
   EXPECT_CALL(CallbacksHandle, runBeforeNonSkippedPass(
                                    HasNameRegex("MockPassHandle<.*Loop>"), _))
       .Times(0);
@@ -1147,30 +1053,6 @@ TEST_F(LoopCallbacksTest, InstrumentedSkippedPasses) {
   EXPECT_CALL(
       CallbacksHandle,
       runAfterPassInvalidated(HasNameRegex("MockPassHandle<.*LoopNest>"), _))
-=======
-  EXPECT_CALL(
-      CallbacksHandle,
-      runBeforeNonSkippedPass(HasNameRegex("MockPassHandle<llvm::Loop>"), _))
-      .Times(0);
-  EXPECT_CALL(CallbacksHandle,
-              runAfterPass(HasNameRegex("MockPassHandle<llvm::Loop>"), _, _))
-      .Times(0);
-  EXPECT_CALL(
-      CallbacksHandle,
-      runAfterPassInvalidated(HasNameRegex("MockPassHandle<llvm::Loop>"), _))
-      .Times(0);
-  EXPECT_CALL(CallbacksHandle,
-              runBeforeNonSkippedPass(
-                  HasNameRegex("MockPassHandle<llvm::LoopNest>"), _))
-      .Times(0);
-  EXPECT_CALL(
-      CallbacksHandle,
-      runAfterPass(HasNameRegex("MockPassHandle<llvm::LoopNest>"), _, _))
-      .Times(0);
-  EXPECT_CALL(CallbacksHandle,
-              runAfterPassInvalidated(
-                  HasNameRegex("MockPassHandle<llvm::LoopNest>"), _))
->>>>>>> 19ab92ca0e1... Add PassInstrumentation test for loop-nest pass
       .Times(0);
   EXPECT_CALL(CallbacksHandle,
               runBeforeAnalysis(HasNameRegex("MockAnalysisHandle"), _))
