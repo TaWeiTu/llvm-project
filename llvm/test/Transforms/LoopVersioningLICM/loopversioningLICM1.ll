@@ -1,4 +1,5 @@
 ; RUN: opt < %s  -O1  -S -loop-versioning-licm -licm -debug-only=loop-versioning-licm 2>&1 | FileCheck %s
+; RUN: opt < %s -enable-new-pm  -O1  -S -loop-versioning-licm -licm -debug-only=loop-versioning-licm 2>&1 | FileCheck %s -check-prefix=NPM
 ; REQUIRES: asserts
 ;
 ; Test to confirm loop is a candidate for LoopVersioningLICM.
@@ -6,6 +7,9 @@
 ;
 ; CHECK: Loop: Loop at depth 2 containing: %for.body3<header><latch><exiting>
 ; CHECK-NEXT:   Loop Versioning found to be beneficial
+
+; NPM: Loop: Loop at depth 2 containing: %for.body3<header><latch><exiting>
+; NPM-NEXT:   Loop Versioning found to be beneficial
 ;
 ; CHECK: for.body3:
 ; CHECK-NEXT: %[[induction:.*]] = phi i32 [ %arrayidx7.promoted, %for.body3.ph ], [ %add8, %for.body3 ]

@@ -1,4 +1,5 @@
 ; RUN: opt < %s  -O1  -S -loop-versioning-licm -licm -debug-only=loop-versioning-licm -disable-loop-unrolling 2>&1 | FileCheck %s
+; RUN: opt < %s  -O1  -S -enable-new-pm -loop-versioning-licm -licm -debug-only=loop-versioning-licm -disable-loop-unrolling 2>&1 | FileCheck %s -check-prefix=NPM
 ; REQUIRES: asserts
 ;
 ; Test to confirm loop is a good candidate for LoopVersioningLICM
@@ -6,6 +7,9 @@
 ;
 ; CHECK: Loop: Loop at depth 2 containing: %for.body3.us<header><latch><exiting>
 ; CHECK-NEXT:     Loop Versioning found to be beneficial
+
+; NPM: Loop: Loop at depth 2 containing: %for.body3.us<header><latch><exiting>
+; NPM-NEXT:     Loop Versioning found to be beneficial
 ;
 ; CHECK: for.cond1.for.inc17_crit_edge.us.loopexit6:       ; preds = %for.body3.us
 ; CHECK-NEXT: %add14.us.lcssa = phi float [ %add14.us, %for.body3.us ]

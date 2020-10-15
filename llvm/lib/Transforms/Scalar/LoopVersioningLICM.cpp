@@ -143,6 +143,10 @@ struct LoopVersioningLICMLegacyPass : public LoopPass {
 };
 
 struct LoopVersioningLICM {
+  // We don't explicitly pass in LoopAccessInfo to the constructor since the
+  // loop versioning might return early due to instructions that are not safe
+  // for versioning. By passing the proxy instead the construction of
+  // LoopAccessInfo will take place only when it's necessary.
   LoopVersioningLICM(AliasAnalysis *AA, ScalarEvolution *SE,
                      OptimizationRemarkEmitter *ORE,
                      function_ref<const LoopAccessInfo &(Loop *)> GetLAI)
@@ -182,7 +186,7 @@ private:
   // Current Loop's LoopAccessInfo
   const LoopAccessInfo *LAI = nullptr;
 
-  // Function for retrieving LoopAccessInfo
+  // Proxy for retrieving LoopAccessInfo.
   function_ref<const LoopAccessInfo &(Loop *)> GetLAI;
 
   // The current loop we are working on.
@@ -410,7 +414,7 @@ bool LoopVersioningLICM::legalLoopInstructions() {
         return false;
       }
     }
-  // Get LoopAccessInfo from current loop.
+  // Get LoopAccessInfo from current loop via the proxy. 
   LAI = &GetLAI(CurLoop);
   // Check LoopAccessInfo for need of runtime check.
   if (LAI->getRuntimePointerChecking()->getChecks().empty()) {
