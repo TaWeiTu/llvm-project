@@ -7,9 +7,6 @@
 ;
 ; CHECK: Loop: Loop at depth 2 containing: %for.body3.us<header><latch><exiting>
 ; CHECK-NEXT:     Loop Versioning found to be beneficial
-
-; NPM: Loop: Loop at depth 2 containing: %for.body3.us<header><latch><exiting>
-; NPM-NEXT:     Loop Versioning found to be beneficial
 ;
 ; CHECK: for.cond1.for.inc17_crit_edge.us.loopexit6:       ; preds = %for.body3.us
 ; CHECK-NEXT: %add14.us.lcssa = phi float [ %add14.us, %for.body3.us ]
