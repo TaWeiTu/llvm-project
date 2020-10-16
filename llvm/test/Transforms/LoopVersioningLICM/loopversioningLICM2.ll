@@ -1,5 +1,5 @@
 ; RUN: opt < %s  -O1  -S -loop-versioning-licm -licm -debug-only=loop-versioning-licm -disable-loop-unrolling 2>&1 | FileCheck %s
-; RUN: opt < %s  -O1  -S -enable-new-pm -loop-versioning-licm -licm -debug-only=loop-versioning-licm -disable-loop-unrolling 2>&1 | FileCheck %s -check-prefix=NPM
+; RUN: opt < %s  -S -passes='function(loop-versioning-licm),function(licm)' --aa-pipeline=default -debug-only=loop-versioning-licm -disable-loop-unrolling 2>&1 | FileCheck %s
 ; REQUIRES: asserts
 ;
 ; Test to confirm loop is a good candidate for LoopVersioningLICM

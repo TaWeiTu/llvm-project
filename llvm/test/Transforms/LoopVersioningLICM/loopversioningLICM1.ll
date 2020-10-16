@@ -1,5 +1,5 @@
 ; RUN: opt < %s  -O1  -S -loop-versioning-licm -licm -debug-only=loop-versioning-licm 2>&1 | FileCheck %s
-; RUN: opt < %s -enable-new-pm  -O1  -S -loop-versioning-licm -licm -debug-only=loop-versioning-licm 2>&1 | FileCheck %s -check-prefix=NPM
+; RUN: opt < %s -S -passes='function(loop-versioning-licm),function(licm)' --aa-pipeline=default -debug-only=loop-versioning-licm 2>&1 | FileCheck %s
 ; REQUIRES: asserts
 ;
 ; Test to confirm loop is a candidate for LoopVersioningLICM.
