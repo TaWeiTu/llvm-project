@@ -414,7 +414,7 @@ bool LoopVersioningLICM::legalLoopInstructions() {
         return false;
       }
     }
-  // Get LoopAccessInfo from current loop via the proxy. 
+  // Get LoopAccessInfo from current loop via the proxy.
   LAI = &GetLAI(CurLoop);
   // Check LoopAccessInfo for need of runtime check.
   if (LAI->getRuntimePointerChecking()->getChecks().empty()) {
