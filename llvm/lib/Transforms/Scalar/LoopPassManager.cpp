@@ -25,7 +25,7 @@ PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
     dbgs() << "Starting Loop pass manager run.\n";
 
   // Runs loop-nest passes only when the current loop is a top-level one.
-  PreservedAnalyses PA = (!L.getParentLoop() && !LoopNestPasses.empty())
+  PreservedAnalyses PA = (L.isOutermost() && !LoopNestPasses.empty())
                              ? runWithLoopNestPasses(L, AM, AR, U)
                              : runWithoutLoopNestPasses(L, AM, AR, U);
 
@@ -49,7 +49,7 @@ PreservedAnalyses
 LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
                                        LoopStandardAnalysisResults &AR,
                                        LPMUpdater &U) {
-  assert(!L.getParentLoop() &&
+  assert(L.isOutermost() &&
          "Loop-nest passes should only run on top-level loops.");
   PreservedAnalyses PA = PreservedAnalyses::all();
 
