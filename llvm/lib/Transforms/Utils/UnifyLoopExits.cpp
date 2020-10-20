@@ -238,6 +238,9 @@ PreservedAnalyses UnifyLoopExitsPass::run(Function &F,
 
   if (!runImpl(LI, DT))
     return PreservedAnalyses::all();
-  return getLoopPassPreservedAnalyses();
+  PreservedAnalyses PA;
+  PA.preserve<LoopAnalysis>();
+  PA.preserve<DominatorTreeAnalysis>();
+  return PA;
 }
 } // namespace llvm
