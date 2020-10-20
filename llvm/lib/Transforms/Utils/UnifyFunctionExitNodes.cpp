@@ -122,7 +122,8 @@ bool UnifyFunctionExitNodesLegacyPass::runOnFunction(Function &F) {
 
 PreservedAnalyses UnifyFunctionExitNodesPass::run(Function &F,
                                                   FunctionAnalysisManager &AM) {
-  if (!unifyUnreachableBlocks(F) && !unifyReturnBlocks(F))
-    return PreservedAnalyses::all();
-  return PreservedAnalyses();
+  bool Changed = false;
+  Changed |= unifyUnreachableBlocks(F);
+  Changed |= unifyReturnBlocks(F);
+  return Changed ? PreservedAnalyses() : PreservedAnalyses::all();
 }
