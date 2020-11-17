@@ -488,6 +488,8 @@ inline FunctionToLoopPassAdaptor
 createFunctionToLoopPassAdaptor<LoopPassManager>(
     LoopPassManager LPM, bool UseMemorySSA = false,
     bool UseBlockFrequencyInfo = false, bool DebugLogging = false) {
+  // Check if LPM contains any loop pass and if it does not, returns an adaptor
+  // in loop-nest mode.
   using PassModelT =
       detail::PassModel<Loop, LoopPassManager, PreservedAnalyses,
                         LoopAnalysisManager, LoopStandardAnalysisResults &,
