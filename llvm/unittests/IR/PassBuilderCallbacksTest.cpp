@@ -995,7 +995,7 @@ TEST_F(LoopCallbacksTest, InstrumentedInvalidatingLoopNestPasses) {
       .Times(0);
 
   StringRef PipelineText = "test-transform";
-  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText, true), Succeeded())
+  ASSERT_THAT_ERROR(PB.parsePassPipeline(PM, PipelineText), Succeeded())
       << "Pipeline was: " << PipelineText;
   PM.run(*M, AM);
 }

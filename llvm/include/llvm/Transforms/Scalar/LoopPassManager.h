@@ -160,6 +160,8 @@ public:
         new RepeatedLoopNestPassModelT(std::move(Pass)));
   }
 
+  bool isEmpty() const { return LoopPasses.empty() && LoopNestPasses.empty(); }
+
   static bool isRequired() { return true; }
 
 protected:
