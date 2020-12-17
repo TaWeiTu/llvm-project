@@ -485,9 +485,10 @@ createFunctionToLoopPassAdaptor(LoopNestPassT Pass, bool UseMemorySSA = false,
 /// be in loop-nest mode if the pass manager contains only loop-nest passes.
 template <>
 inline FunctionToLoopPassAdaptor
-createFunctionToLoopPassAdaptor<LoopPassManager>(
-    LoopPassManager LPM, bool UseMemorySSA = false,
-    bool UseBlockFrequencyInfo = false, bool DebugLogging = false) {
+createFunctionToLoopPassAdaptor<LoopPassManager>(LoopPassManager LPM,
+                                                 bool UseMemorySSA,
+                                                 bool UseBlockFrequencyInfo,
+                                                 bool DebugLogging) {
   // Check if LPM contains any loop pass and if it does not, returns an adaptor
   // in loop-nest mode.
   using PassModelT =
@@ -495,9 +496,9 @@ createFunctionToLoopPassAdaptor<LoopPassManager>(
                         LoopAnalysisManager, LoopStandardAnalysisResults &,
                         LPMUpdater &>;
   bool LoopNestMode = (LPM.getNumLoopPasses() == 0);
-  return FunctionToLoopPassAdaptor<LoopPassManager>(
-      std::make_unique<PassModelT>(std::move(LPM)), UseMemorySSA,
-      UseBlockFrequencyInfo, DebugLogging, LoopNestMode);
+  return FunctionToLoopPassAdaptor(std::make_unique<PassModelT>(std::move(LPM)),
+                                   UseMemorySSA, UseBlockFrequencyInfo,
+                                   DebugLogging, LoopNestMode);
 }
 
 /// Pass for printing a loop's contents as textual IR.
